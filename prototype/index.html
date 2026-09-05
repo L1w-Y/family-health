@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>家庭健康 · 可交互原型</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="stage">
+    <div id="phone">
+      <div id="statusbar"><span>9:41</span><span>📶 🔋</span></div>
+      <header id="memberbar"></header>
+      <main id="screen"></main>
+      <nav id="tabbar"></nav>
+      <div id="modal-root"></div>
+      <div id="toast"></div>
+    </div>
+    <div id="hint">
+      可交互原型 · 数据为演示数据 · 操作仅保存在内存，刷新即重置<br>
+      对应文档：docs/05-页面结构与交互.md（v2.1）
+    </div>
+  </div>
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

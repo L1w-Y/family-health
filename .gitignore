@@ -1,0 +1,24 @@
+# 环境与密钥
+.env
+*.local
+
+# Go
+server/vendor/
+server/build/
+*.exe
+
+# 部署产物
+*.zip
+
+# Android（M2）
+app/.gradle/
+app/build/
+app/local.properties
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
