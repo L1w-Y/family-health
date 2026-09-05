@@ -5,12 +5,13 @@ package model
 // CheckupEvent 复查事件（容器：报告 + 备注 + 用药调整 + 下次复查）
 type CheckupEvent struct {
 	Base
-	ProfileID       string  `json:"profile_id" db:"profile_id"`
-	CheckupDate     string  `json:"checkup_date" db:"checkup_date"` // ISO YYYY-MM-DD
-	Hospital        string  `json:"hospital,omitempty" db:"hospital"`
-	Department      string  `json:"department,omitempty" db:"department"`
-	Note            string  `json:"note,omitempty" db:"note"`
-	NextCheckupDate *string `json:"next_checkup_date,omitempty" db:"next_checkup_date"`
+	ProfileID             string  `json:"profile_id" db:"profile_id"`
+	CheckupDate           string  `json:"checkup_date" db:"checkup_date"` // ISO YYYY-MM-DD
+	Hospital              string  `json:"hospital,omitempty" db:"hospital"`
+	Department            string  `json:"department,omitempty" db:"department"`
+	Note                  string  `json:"note,omitempty" db:"note"`
+	NextCheckupDate       *string `json:"next_checkup_date,omitempty" db:"next_checkup_date"`
+	MedicationChangesNote string  `json:"medication_changes_note,omitempty" db:"medication_changes_note"` // 展示性备注（03 §3）；实际变更走载荷 C
 }
 
 // Report 检查报告（必须属于某复查事件）

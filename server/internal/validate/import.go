@@ -1,131 +1,88 @@
-// Package validate 导入文本格式 v1 的结构定义与校验。
-// 契约：docs/03-导入格式-v1.md（全文）；本包是该契约的代码形态。
-// 任何契约变更必须先改 docs/03，再改本包。
 package validate
 
-// 契约：03 §1 限制常量（§6.4）
-const (
-	MaxBodyBytes        = 512 * 1024
-	MaxReportsPerEvent  = 30
-	MaxIndicatorsPerRep = 200
-	MaxMeasurements     = 500
-	FormatName          = "family-health-import"
-	FormatVersion       = 1
+// ParseAndValidate：03 §1 原则 1（整体原子，任一字段非法整体拒绝）的入口。
+// 校验规则逐条对应 03 §2~§6.4，测试见同包 *_test.go。
+import (
+	"bytes"
+	"encoding/json"
 )
 
-// Envelope 导入信封（03 §2）
-type Envelope struct {
-	Format   string     `json:"format"`
-	Version  int        `json:"version"`
-	ImportID string     `json:"import_id"`
-	DryRun   bool       `json:"dry_run"`
-	Profile  ProfileRef `json:"profile_ref"`
-	Payload  Payload    `json:"payload"`
-}
-
-// ProfileRef 档案定位：id 或 name 二选一（03 §2）
-type ProfileRef struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
-}
-
-// Payload 三种载荷之一（按 Type 判别）
-type Payload struct {
-	Type      string            `json:"type"` // checkup_event / measurements / medication_changes
-	Event     *EventPayload     `json:"event,omitempty"`
-	Items     []MeasurementItem `json:"items,omitempty"`
-	ChangeSet *MedChangePayload `json:",omitempty"` // medication_changes 展开字段见 03 §5
-}
-
-// EventPayload 载荷 A：复查事件（03 §3）
-type EventPayload struct {
-	CheckupDate           string          `json:"checkup_date"`
-	Hospital              string          `json:"hospital,omitempty"`
-	Department            string          `json:"department,omitempty"`
-	Note                  string          `json:"note,omitempty"`
-	NextCheckupDate       string          `json:"next_checkup_date,omitempty"`
-	MedicationChangesNote string          `json:"medication_changes_note,omitempty"`
-	Reports               []ReportPayload `json:"reports"`
-}
-
-// ReportPayload 报告（03 §3.1）
-type ReportPayload struct {
-	Title          string             `json:"title"`
-	ReportDate     string             `json:"report_date,omitempty"`
-	ConclusionText string             `json:"conclusion_text,omitempty"`
-	AttachmentIDs  []string           `json:"attachment_ids,omitempty"`
-	Indicators     []IndicatorPayload `json:"indicators,omitempty"`
-}
-
-// IndicatorPayload 指标项（03 §3.2）；Value 为 number 或 string
-type IndicatorPayload struct {
-	ItemName       string `json:"item_name"`
-	Value          any    `json:"value"`
-	Unit           string `json:"unit,omitempty"`
-	ReferenceRange string `json:"reference_range,omitempty"`
-}
-
-// MeasurementItem 载荷 B：批量测量（03 §4）
-type MeasurementItem struct {
-	Type         string   `json:"type"` // bp / glucose
-	MeasuredAt   string   `json:"measured_at"`
-	Systolic     *int     `json:"systolic,omitempty"`
-	Diastolic    *int     `json:"diastolic,omitempty"`
-	HeartRateBpm *int     `json:"heart_rate_bpm,omitempty"`
-	GlucoseMmol  *float64 `json:"glucose_mmol,omitempty"`
-	GlucoseCtx   string   `json:"glucose_context,omitempty"`
-	Note         string   `json:"note,omitempty"`
-}
-
-// MedChangePayload 载荷 C：用药变更（03 §5）
-type MedChangePayload struct {
-	EffectiveDate string      `json:"effective_date"`
-	LinkedEventID string      `json:"linked_event_id,omitempty"`
-	ReasonNote    string      `json:"reason_note,omitempty"`
-	Stop          []StopItem  `json:"stop,omitempty"`
-	Start         []StartItem `json:"start,omitempty"`
-}
-
-// StopItem 停用条目（按 id 或 name 匹配当前进行中条目）
-type StopItem struct {
-	Match   MatchRef `json:"match"`
-	EndDate string   `json:"end_date,omitempty"`
-}
-
-// MatchRef 匹配引用
-type MatchRef struct {
-	ID   string `json:"id,omitempty"`
-	Name string `json:"name,omitempty"`
-}
-
-// StartItem 新增条目
-type StartItem struct {
-	Category   string   `json:"category,omitempty"` // 缺省 long_term
-	Kind       string   `json:"med_kind,omitempty"` // 缺省 western
-	Name       string   `json:"name"`
-	DosageText string   `json:"dosage_text,omitempty"`
-	DoseSlots  []string `json:"dose_slots,omitempty"`
-	StartDate  string   `json:"start_date,omitempty"`
-	EndDate    string   `json:"end_date,omitempty"`
-	Supersedes string   `json:"supersedes,omitempty"`
-}
-
-// Error 校验错误（03 §6.3）
-type Error struct {
-	Path    string `json:"path"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// Warning 非阻断警告（03 §6.2）
-type Warning struct {
-	Path    string `json:"path"`
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-// ParseAndValidate 解析并整体校验（任一字段非法则整体拒绝，03 §1 原则 1）。
-// TODO M1：实现。校验规则逐条对应 03 §2~§6.4，测试见同包 *_test.go。
+// ParseAndValidate 解析并整体校验导入文本。
+// 返回：解析后的信封（校验失败时也可能非 nil，供调试）、阻断错误、非阻断警告。
+// error 仅用于调用方无法继续的意外；当前实现恒为 nil——所有非法输入都归入 []Error。
 func ParseAndValidate(body []byte) (*Envelope, []Error, []Warning, error) {
-	return nil, nil, nil, errNotImplemented
+	var es errors
+	var ws []Warning
+
+	if len(body) == 0 {
+		es.add("", CodeRequired, "请求体为空")
+		return nil, es, nil, nil
+	}
+	if len(body) > MaxBodyBytes {
+		es.addf("", CodeLimitExceeded, "单请求体积超限（≤%dKB）", MaxBodyBytes/1024)
+		return nil, es, nil, nil
+	}
+
+	var env Envelope
+	dec := json.NewDecoder(bytes.NewReader(body))
+	if err := dec.Decode(&env); err != nil {
+		es.add("", CodeSchema, "JSON 解析失败："+err.Error())
+		return nil, es, nil, nil
+	}
+	// 信封后不允许拼接第二个 JSON 值
+	if dec.More() {
+		es.add("", CodeSchema, "JSON 尾部存在多余内容")
+		return nil, es, nil, nil
+	}
+
+	checkEnvelope(&env, &es)
+	switch env.Payload.Type {
+	case PayloadCheckupEvent:
+		checkEventPayload(env.Payload.Event, &es)
+	case PayloadMeasurements:
+		checkMeasurements(env.Payload.Items, &es, &ws)
+	case PayloadMedChanges:
+		checkMedChanges(env.Payload.ChangeSet, &es)
+	case "":
+		// checkEnvelope 已报 REQUIRED
+	default:
+		// checkEnvelope 已报 ENUM
+	}
+	return &env, es, ws, nil
+}
+
+// checkEnvelope 信封字段（03 §2）
+func checkEnvelope(env *Envelope, es *errors) {
+	if env.Format == "" {
+		es.add("format", CodeRequired, "format 必填")
+	} else if env.Format != FormatName {
+		es.addf("format", CodeSchema, "format 固定为 %q", FormatName)
+	}
+	if env.Version == 0 {
+		es.add("version", CodeRequired, "version 必填")
+	} else if env.Version != FormatVersion {
+		es.addf("version", CodeSchema, "version 一期固定为 %d", FormatVersion)
+	}
+	if env.ImportID == "" {
+		es.add("import_id", CodeRequired, "import_id 必填")
+	} else if !IsUUID(env.ImportID) {
+		es.add("import_id", CodeSchema, "import_id 须为 UUID")
+	}
+	if env.Profile.ID == "" && env.Profile.Name == "" {
+		es.add("profile_ref", CodeRequired, "profile_ref 必填（id 或 name 二选一）")
+	} else if !oneOf(env.Profile.ID, env.Profile.Name) {
+		es.add("profile_ref", CodeSchema, "profile_ref 的 id 与 name 只能二选一")
+	} else if env.Profile.ID != "" && !IsUUID(env.Profile.ID) {
+		es.add("profile_ref.id", CodeSchema, "profile_ref.id 须为 UUID")
+	}
+	if env.Payload.Type == "" {
+		es.add("payload.type", CodeRequired, "payload.type 必填")
+		return
+	}
+	switch env.Payload.Type {
+	case PayloadCheckupEvent, PayloadMeasurements, PayloadMedChanges:
+	default:
+		es.addf("payload.type", CodeEnum, "payload.type 须为 %s / %s / %s 之一",
+			PayloadCheckupEvent, PayloadMeasurements, PayloadMedChanges)
+	}
 }

@@ -1,0 +1,42 @@
+{
+  "format": "family-health-import",
+  "version": 1,
+  "import_id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+  "profile_ref": { "name": "爷爷" },
+  "payload": {
+    "type": "checkup_event",
+    "event": {
+      "checkup_date": "2026-08-15",
+      "hospital": "市人民医院",
+      "department": "肾内科",
+      "note": "尿蛋白控制一般，医生嘱低盐饮食，三个月后复查",
+      "next_checkup_date": "2026-11-15",
+      "reports": [
+        {
+          "title": "尿常规",
+          "indicators": [
+            { "item_name": "尿蛋白", "value": "1+", "reference_range": "阴性" },
+            { "item_name": "尿微量白蛋白", "value": 156.3, "unit": "mg/L", "reference_range": "<30" },
+            { "item_name": "尿肌酐", "value": 8.82, "unit": "mmol/L" },
+            { "item_name": "尿微量白蛋白/肌酐比值(ACR)", "value": 201.5, "unit": "mg/g", "reference_range": "<30" }
+          ]
+        },
+        {
+          "title": "肾功能+血糖",
+          "indicators": [
+            { "item_name": "血肌酐", "value": 132, "unit": "μmol/L", "reference_range": "41~81" },
+            { "item_name": "尿素氮", "value": 9.1, "unit": "mmol/L", "reference_range": "2.9~8.2" },
+            { "item_name": "糖化血红蛋白", "value": 7.2, "unit": "%", "reference_range": "4.0~6.0" },
+            { "item_name": "空腹血糖", "value": 7.8, "unit": "mmol/L", "reference_range": "3.9~6.1" },
+            { "item_name": "血钙", "value": 2.31, "unit": "mmol/L", "reference_range": "2.11~2.52" }
+          ]
+        },
+        {
+          "title": "肾脏B超",
+          "conclusion_text": "双肾大小形态正常，实质回声增强，右肾囊肿约 8mm。建议定期复查。",
+          "indicators": []
+        }
+      ]
+    }
+  }
+}
