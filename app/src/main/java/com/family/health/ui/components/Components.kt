@@ -101,13 +101,13 @@ fun SegControl(options: List<String>, selected: Int, onSelect: (Int) -> Unit) {
     }
 }
 
-/** 胶囊 chip（.chip） */
+/** 胶囊 chip（.chip）。onClick 必须为最后一个参数：尾随 lambda 一律视为点击回调 */
 @Composable
 fun FChip(
     text: String,
     on: Boolean = false,
-    onClick: (() -> Unit)? = null,
     trailing: (@Composable (() -> Unit))? = null,
+    onClick: (() -> Unit)? = null,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
