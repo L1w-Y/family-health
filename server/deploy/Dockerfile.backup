@@ -1,0 +1,7 @@
+# backup 服务部署镜像：postgres:16-alpine 基底自带 pg_dump（与 PG16 服务端版本对齐）
+# compose 中 context 为 ../build/backup，本文件经 dockerfile 字段引用（位于 context 外）
+FROM postgres:16-alpine
+WORKDIR /app
+COPY main /app/main
+EXPOSE 9000
+CMD ["/app/main"]

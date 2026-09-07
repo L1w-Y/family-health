@@ -1,4 +1,4 @@
-# smoke.ps1 · M1 验收脚本：curl 全链路（auth → import → sync）
+﻿# smoke.ps1 · M1 验收脚本：curl 全链路（auth → import → sync）
 # 契约：docs/00-索引.md §2 映射表；docs/03-导入格式-v1.md §7 示例
 # 用法（部署后填好配置执行）：pwsh ./scripts/smoke.ps1
 #   三个函数若触发器域名不同，用 -AuthBase / -SyncBase / -ImportBase 分别覆盖。
@@ -36,6 +36,17 @@ $wrong = try { Invoke-RestMethod -Method Post -Uri "$AuthBase/auth" -ContentType
   -Body (@{ secret = 'wrong'; display_name = 'x' } | ConvertTo-Json) } catch { $_.Exception.Response }
 Assert ($wrong -isnot [psobject] -or $authResp.ok) '口令错误被拒绝（HTTP 非 2xx）'
 
+# ===== 1b. sync 上行：建立测试档案（import 依赖档案已存在，走真实 App 路径） =====
+Step '1b. 上行建立测试档案'
+$profileBody = @{
+  table = 'profiles'; op = 'insert'
+  row = @{ id = [guid]::NewGuid().ToString(); name = $ProfileName; relation = $ProfileName; gender = 'male'; notes = '' }
+} | ConvertTo-Json -Depth 5
+$pw = Invoke-RestMethod -Method Post -Uri "$SyncBase/sync" `
+  -Headers ($Headers + @{ 'Idempotency-Key' = [guid]::NewGuid().ToString() }) `
+  -ContentType 'application/json; charset=utf-8' -Body ([System.Text.Encoding]::UTF8.GetBytes($profileBody))
+Assert ($pw.ok -eq $true) '档案建立'
+
 # ===== 2. import：提交复查事件（03 §7 示例） =====
 Step '2. import：校验并写入一次复查（03 §7 示例）'
 $importBody = Get-Content -Raw -Encoding UTF8 -Path "$PSScriptRoot/fixtures/checkup-sample.json"
@@ -69,7 +80,7 @@ Step '3. sync 增量下行'
 $sync = Invoke-RestMethod -Uri "$SyncBase/sync?since=0&limit=500" -Headers $Headers
 $tables = $sync.changes | ForEach-Object { $_.table } | Sort-Object -Unique
 Assert ($tables -contains 'checkup_events' -and $tables -contains 'reports' -and $tables -contains 'indicator_items') "下行含三类表（实际：$($tables -join ',')）"
-Assert ($sync.changes.Count -eq 10) "dry_run 未写库（仅 1 事件 + 3 报告 + 9 指标 = 13 行含其他，本次期望 ≥10；按实际断言）"
+Assert ($sync.changes.Count -ge 13) "dry_run 未写库，下行含导入全部行（实际 $($sync.changes.Count) 行，期望 ≥13）"
 $seqs = $sync.changes.row.seq
 Assert (($seqs | Measure-Object -Maximum).Maximum -eq $sync.next) 'next = 最大 seq'
 

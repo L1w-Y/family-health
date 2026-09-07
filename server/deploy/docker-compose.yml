@@ -1,0 +1,105 @@
+# 家庭健康 · 自建部署编排（轻量应用服务器 / Docker）
+# 契约：docs/04-技术选型.md §2（部署形态）；server/README.md「部署」
+# 用法：cd deploy && docker compose up -d --build
+name: family-health
+
+networks:
+  internal:
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+services:
+  pg:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: familyhealth
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+    # 1G 内存机型调优：限制共享缓冲与连接数
+    command: postgres -c shared_buffers=128MB -c work_mem=4MB -c max_connections=50
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../scripts:/scripts:ro # 建表脚本，供初始化 exec 使用
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d familyhealth"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    networks: [internal]
+    # 不暴露到宿主机：仅容器内网可达
+
+  auth:
+    build: ../build/auth
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "9000"
+      DATABASE_URL: postgres://postgres:${PG_PASSWORD}@pg:5432/familyhealth?sslmode=disable
+    depends_on:
+      pg:
+        condition: service_healthy
+    networks: [internal]
+
+  sync:
+    build: ../build/sync
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "9000"
+      DATABASE_URL: postgres://postgres:${PG_PASSWORD}@pg:5432/familyhealth?sslmode=disable
+    depends_on:
+      pg:
+        condition: service_healthy
+    networks: [internal]
+
+  import:
+    build: ../build/import
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "9000"
+      DATABASE_URL: postgres://postgres:${PG_PASSWORD}@pg:5432/familyhealth?sslmode=disable
+    depends_on:
+      pg:
+        condition: service_healthy
+    networks: [internal]
+
+  backup:
+    build:
+      context: ../build/backup
+      dockerfile: ../../deploy/Dockerfile.backup # postgres:16-alpine 基底，自带 pg_dump
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PORT: "9000"
+      DATABASE_URL: postgres://postgres:${PG_PASSWORD}@pg:5432/familyhealth?sslmode=disable
+      BACKUP_STORAGE: fs
+      BACKUP_FS_DIR: /backups
+    volumes:
+      - ./backups:/backups # 滚动保留 30 天，落宿主机磁盘
+    depends_on:
+      pg:
+        condition: service_healthy
+    networks: [internal]
+    # 不经 Caddy 暴露；由宿主机 cron 经容器内网触发
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS} # :80 = 纯 HTTP 验证期；改为域名即自动 HTTPS
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - auth
+      - sync
+      - import
+    networks: [internal]

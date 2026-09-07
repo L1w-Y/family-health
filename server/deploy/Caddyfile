@@ -1,0 +1,24 @@
+# 家庭健康 · 反向代理
+# SITE_ADDRESS=:80 时为 HTTP 验证期；改成域名（如 fh.example.duckdns.org）后 Caddy 自动签发/续期 HTTPS
+{
+	admin off
+}
+
+{$SITE_ADDRESS} {
+	# 家庭口令换设备 token（02 §3.2）
+	handle /auth* {
+		reverse_proxy auth:9000
+	}
+	# 增量同步上行/下行（02 §4）
+	handle /sync* {
+		reverse_proxy sync:9000
+	}
+	# HTTP 文本导入（03）
+	handle /api/v1/import* {
+		reverse_proxy import:9000
+	}
+	# 健康探针与默认响应
+	handle {
+		respond "family-health ok" 200
+	}
+}

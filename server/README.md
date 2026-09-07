@@ -1,7 +1,8 @@
-# server · Go 云函数
+# server · Go 服务
 
-> 契约：`docs/04-技术选型.md` §2（五函数划分）、`docs/02-数据库与同步.md`（数据与协议）、`docs/03-导入格式-v1.md`（导入契约）。
+> 契约：`docs/04-技术选型.md` §2（部署形态与架构）、`docs/02-数据库与同步.md`（数据与协议）、`docs/03-导入格式-v1.md`（导入契约）。
 > 工作规则见根 `AGENTS.md`。
+> 部署形态：轻量应用服务器单机 Docker Compose（编排与运维脚本见 `deploy/`），2026-09-07 由 CloudBase 云托管迁入，后端代码零改动。
 
 ## 目录
 
@@ -19,19 +20,17 @@ internal/    共享领域包（只能被 functions 依赖，职责见各包 doc 
 scripts/     schema.sql 建表脚本、smoke.ps1 端到端验证、fixtures/ 测试载荷
 ```
 
-## 函数入口的运行时约定（M1 决策记录）
+## 服务入口的运行时约定
 
-CloudBase Go 云函数采用 **custom runtime** 形态部署：
+每个服务是独立 `main` 包，编译为单个静态二进制，以 Docker 容器运行：
 
-- 每个函数是独立 `main` 包，编译为单个二进制；
-- 进程启动后连接 `DATABASE_URL`，随后 `net/http` 监听环境变量 **`PORT`**（缺省 8080）；
+- 进程启动后连接 `DATABASE_URL`，随后 `net/http` 监听环境变量 **`PORT`**（部署注入 9000，缺省 8080）；
 - 路由同时挂业务路径（`/auth`、`/sync`、`/api/v1/import`、`/backup`）与根路径 `/`，
-  兼容触发器「路径透传」与「去前缀」两种形态，部署时无需额外配置；
-- backup 由定时触发器周期调用 `POST /backup`，可用 `BACKUP_TOKEN`（Bearer）保护端点。
-
-部署假设：CloudBase 支持 Go custom runtime（PORT 监听）或 SCF custom runtime 镜像部署；
-若实际仅支持事件函数形态，则需在每个 main.go 外套一层 SCF bootstrap（handler 已按
-`NewHandler(store, config)` 与 main 解耦，适配只动 main.go）。
+  兼容代理「路径透传」与「去前缀」两种形态；
+- 对外只暴露 Caddy（:80/:443），按路径前缀分发到各服务容器（见 `deploy/Caddyfile`）；
+- backup 不经 Caddy 暴露，由宿主机 cron 每日经容器内网调用 `POST /backup`，
+  `BACKUP_TOKEN`（Bearer）保护端点（见 `deploy/backup-trigger.sh`）；
+- pg 容器不暴露宿主机端口，仅 Docker 内网可达。
 
 ## 依赖选型
 
@@ -49,7 +48,7 @@ CloudBase Go 云函数采用 **custom runtime** 形态部署：
 
 | 变量 | 用途 | 函数 |
 |---|---|---|
-| `DATABASE_URL` | 托管 PG 连接串（sslmode=require） | 全部 |
+| `DATABASE_URL` | PG 连接串（容器内网 `sslmode=disable`；本地调试另行指定） | 全部 |
 | `FAMILY_SECRET` | 家庭口令 | auth |
 | `FAMILY_ID` | 家庭 id（单家庭部署，02 §3.2 演进风险已知） | auth |
 | `TOKEN_SALT` | 令牌哈希环境级盐（生产必配） | authn（全部） |
@@ -85,22 +84,35 @@ go test ./...      # 单元测试（全部基于内存实现/纯逻辑，不依�
 go vet ./...
 ```
 
-## 部署
+## 部署（轻量应用服务器 · 自建 Docker Compose）
+
+服务器：腾讯云轻量香港 2核1G（Ubuntu 24.04 + Docker）。一次部署 = 编译 → 上传 → compose up → 初始化 → 冒烟。
 
 ```powershell
-# 1. 建表（托管 PG 控制台 SQL 窗口或 psql）
-psql $env:DATABASE_URL -f scripts/schema.sql
+# 1. 交叉编译（linux/amd64，输出到 build/<服务>/main）
+$env:GOOS='linux'; $env:GOARCH='amd64'; $env:CGO_ENABLED='0'
+go build -o build/auth/main   ./functions/auth
+go build -o build/sync/main   ./functions/sync
+go build -o build/import/main ./functions/import
+go build -o build/backup/main ./functions/backup
 
-# 2. 各函数编译（示例：linux/amd64）
-$env:GOOS='linux'; $env:GOARCH='amd64'
-go build -o dist/auth      ./functions/auth
-go build -o dist/sync      ./functions/sync
-go build -o dist/import    ./functions/import
-go build -o dist/backup    ./functions/backup
+# 2. 上传（build/ scripts/ deploy/ → 服务器 ~/family-health/，保持 build 层级）
+scp -r build/auth build/sync build/import build/backup scripts deploy <user>@<服务器IP>:~/family-health/
 
-# 3. CloudBase 创建 Go custom runtime 函数，上传二进制，配置环境变量与触发器
-#    （tcb CLI 具体命令在 M1 首次部署时补充于此）
+# 3. 服务器上：构建并启动（首次会自动拉取 postgres:16-alpine / caddy:2-alpine）
+ssh <user>@<服务器IP> "chmod +x ~/family-health/build/*/main && cd ~/family-health/deploy && docker compose up -d --build"
 
-# 4. 全链路冒烟
-./scripts/smoke.ps1 -BaseUrl 'https://<触发器域名>' -FamilySecret '<家庭口令>'
+# 4. 初始化数据库（建表 + 家庭行；重置为干净态用 bash deploy/server-reset.sh）
+ssh <user>@<服务器IP> "cd ~/family-health/deploy && docker compose exec -T pg psql -U postgres -d familyhealth -f /scripts/schema.sql && docker compose exec -T pg psql -U postgres -d familyhealth -f /scripts/init-family.sql"
+
+# 5. 全链路冒烟（HTTP 验证期直接打 IP）
+./scripts/smoke.ps1 -BaseUrl 'http://<服务器IP>' -FamilySecret '<家庭口令>'
 ```
+
+运维要点：
+
+- 密钥集中在 `deploy/.env`（不入库）：`PG_PASSWORD` / `FAMILY_ID` / `FAMILY_SECRET` / `TOKEN_SALT` / `BACKUP_TOKEN` / `SITE_ADDRESS`；
+- HTTPS：`SITE_ADDRESS` 改为域名（DuckDNS 免费子域指向服务器 IP）后 `docker compose restart caddy`，自动签发/续期；
+- 备份：cron 每日 03:30 触发（`server-reset.sh` 幂等安装），转储在 `deploy/backups/backups/`，滚动 30 天；
+- 改家庭口令：改 `.env` 的 `FAMILY_SECRET` 后 `docker compose restart auth` 即可（库中不存口令哈希）；
+- 更新服务：重新编译 → scp 对应 `build/<服务>/main`（注意 chmod +x）→ `docker compose up -d --build <服务>`。
