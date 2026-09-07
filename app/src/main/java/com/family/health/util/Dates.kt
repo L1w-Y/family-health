@@ -39,3 +39,32 @@ fun weekdayCn(date: String): String {
 
 fun Double.trimmed(): String =
     if (this == Math.floor(this) && !this.isInfinite()) this.toLong().toString() else this.toString()
+
+// ---------- epoch ms ↔ 展示串（设备本地时区；契约 02 §1：ms + tz_offset_min） ----------
+
+private val DT_FMT: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+
+/** 设备当前时区偏移（分钟，如 +480） */
+fun deviceTzOffsetMin(): Int =
+    (java.time.ZoneId.systemDefault().rules.getOffset(java.time.Instant.now()).totalSeconds / 60)
+
+fun msToDateTime(ms: Long): String =
+    LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), java.time.ZoneId.systemDefault()).format(DT_FMT)
+
+fun dateTimeToMs(text: String): Long =
+    LocalDateTime.parse(text, DT_FMT).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+fun msToDate(ms: Long): String = msToDateTime(ms).substring(0, 10)
+
+/** "MM-dd HH:mm"（便签展示，原型同款；按当前年解析） */
+fun msToMmDdHm(ms: Long): String {
+    val dt = LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), java.time.ZoneId.systemDefault())
+    return "%02d-%02d %02d:%02d".format(dt.monthValue, dt.dayOfMonth, dt.hour, dt.minute)
+}
+
+/** "MM-dd HH:mm"（补当前年）→ ms；解析失败返回 null */
+fun mmDdHmToMs(text: String): Long? = runCatching {
+    val year = LocalDate.now().year
+    val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    LocalDateTime.parse("$year-$text", fmt).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+}.getOrNull()

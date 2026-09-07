@@ -72,6 +72,7 @@ fun MineScreen(vm: AppViewModel, nav: NavHostController) {
                 "提醒设置" to "服药 / 测量 / 复查",
                 "API 令牌" to "供 HTTP 导入",
                 "数据导出" to "JSON + 照片包",
+                "服务器与账号" to "连接 / 同步状态",
                 "关于与隐私说明" to "",
             )
         ) { i ->
@@ -81,7 +82,8 @@ fun MineScreen(vm: AppViewModel, nav: NavHostController) {
                 2 -> nav.navigate(Routes.REMINDERS)
                 3 -> nav.navigate(Routes.TOKEN)
                 4 -> nav.navigate(Routes.EXPORT)
-                5 -> nav.navigate(Routes.ABOUT)
+                5 -> nav.navigate(Routes.ACCOUNT)
+                6 -> nav.navigate(Routes.ABOUT)
             }
         }
     }
@@ -254,15 +256,29 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
 
 @Composable
 fun TokenScreen(vm: AppViewModel, nav: NavHostController) {
+    val session = remember { vm.sessionInfo() }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
         PageTitle("API 令牌", onBack = { nav.popBackStack() })
-        PageSub("供外部脚本 / HTTP 导入使用，与 App 粘贴导入同一格式")
+        PageSub("本机设备令牌即 HTTP 导入凭证（Authorization: Bearer <令牌>），与 App 粘贴导入同一格式")
         FhCard {
-            KvRow("当前令牌") { Text("fhk_••••••••3d9a", fontSize = 14.sp, color = FhColors.Text) }
-            KvRow("署名") { Text("爸爸（导入记录将署名该设备）", fontSize = 14.sp, color = FhColors.Text) }
+            KvRow("当前令牌") {
+                Text(
+                    vm.deviceToken().let { if (it.length > 12) it.take(8) + "…" + it.takeLast(6) else it },
+                    fontSize = 14.sp, color = FhColors.Text,
+                )
+            }
+            KvRow("署名") { Text("${session.deviceName}（导入记录将署名该设备）", fontSize = 14.sp, color = FhColors.Text) }
         }
-        FhButton("创建新令牌", onClick = { vm.toast("新令牌 fhk_new_x7q2，仅显示一次（演示）") }, ghost = true)
-        FhButton("吊销当前令牌", onClick = { vm.toast("已吊销（演示）") }, ghost = true)
+        FhButton("复制完整令牌", onClick = {
+            clipboard.setText(androidx.compose.ui.text.AnnotatedString(vm.deviceToken()))
+            vm.toast("已复制")
+        }, ghost = true)
+        Text(
+            "换新令牌：在\"服务器与账号\"里重新配置（会清空本机数据并重新拉取）。",
+            fontSize = 12.sp, color = FhColors.Text2, lineHeight = 18.sp,
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 

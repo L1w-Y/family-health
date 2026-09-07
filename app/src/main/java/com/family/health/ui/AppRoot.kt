@@ -107,6 +107,7 @@ object Routes {
     const val REMINDERS = "reminders"
     const val TOKEN = "token"
     const val EXPORT = "export"
+    const val ACCOUNT = "account"
     const val ABOUT = "about"
 
     fun event(id: String) = "event/$id"
@@ -131,7 +132,14 @@ fun NavHostController.switchTab(route: String) {
 @Composable
 fun AppRoot(vm: AppViewModel = viewModel()) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val configured by vm.configured.collectAsStateWithLifecycle()
     val nav = rememberNavController()
+
+    // 未配置服务器：仅呈现首配页（契约：docs/02 §3.2 设备即身份，先 auth 后使用）
+    if (!configured) {
+        com.family.health.feature.setup.SetupScreen(vm)
+        return
+    }
     var showPlus by rememberSaveable { mutableStateOf(false) }
     var showMemberSwitch by rememberSaveable { mutableStateOf(false) }
 
@@ -432,6 +440,7 @@ private fun AppNavHost(nav: NavHostController, vm: AppViewModel) {
         composable(Routes.REMINDERS) { RemindersScreen(vm, nav) }
         composable(Routes.TOKEN) { TokenScreen(vm, nav) }
         composable(Routes.EXPORT) { ExportScreen(vm, nav) }
+        composable(Routes.ACCOUNT) { com.family.health.feature.mine.AccountScreen(vm, nav) }
         composable(Routes.ABOUT) { AboutScreen(vm, nav) }
     }
 }

@@ -1,24 +1,34 @@
-// 契约：docs/05-页面结构与交互.md（交互行为）；数据为内存假数据（M2 前半段）
+// 应用 ViewModel：UI 状态装配（Room 流）+ 写操作分发（仓储）。契约：docs/05（交互行为）、docs/02 §4
 package com.family.health.data
 
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.family.health.FamilyHealthApp
 import com.family.health.data.model.CheckupEvent
 import com.family.health.data.model.DailyMedItem
 import com.family.health.data.model.Device
 import com.family.health.data.model.Measurement
-import com.family.health.data.model.MedChange
 import com.family.health.data.model.MedicationItem
 import com.family.health.data.model.Note
 import com.family.health.data.model.Profile
 import com.family.health.data.model.ReminderSetting
-import com.family.health.data.model.WatchItem
-import com.family.health.syncclient.FakeSyncClient
-import com.family.health.syncclient.SyncClient
+import com.family.health.data.session.SessionStore
+import com.family.health.data.sync.SyncEngine
+import com.family.health.data.repo.Repository
+import com.family.health.syncclient.ApiException
+import com.family.health.syncclient.HttpSyncClient
+import com.family.health.syncclient.ImportResult
 import com.family.health.util.todayStr
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 data class ToastMsg(val id: Long, val text: String)
@@ -44,182 +54,214 @@ data class AppUiState(
     val trendDays: Int = 30,
     val lastGlucoseCtx: String = "fasting",
 ) {
-    val currentMember: Profile get() = members.first { it.id == currentMemberId }
+    /** 空成员安全：未配置/空家庭时给占位档案，页面走空态分支 */
+    val currentMember: Profile
+        get() = members.firstOrNull { it.id == currentMemberId }
+            ?: members.firstOrNull()
+            ?: Profile(id = "", name = "（暂无成员）")
 }
 
-class AppViewModel(
-    val syncClient: SyncClient = FakeSyncClient(),
-) : ViewModel() {
+/** 首配状态（SetupScreen 观察） */
+data class SetupUiState(
+    val loading: Boolean = false,
+    val error: String? = null,
+)
 
-    private val _ui = MutableStateFlow(
-        AppUiState(
-            familyName = DemoData.FAMILY_NAME,
-            devices = DemoData.devices,
-            members = DemoData.members,
-            currentMemberId = "yeye",
-            reminders = DemoData.reminders,
-        )
+class AppViewModel(app: Application) : AndroidViewModel(app) {
+    private val container = (app as FamilyHealthApp).container
+    private val session: SessionStore = container.session
+    private val repo: Repository = container.repo
+    private val engine: SyncEngine = container.engine
+    private val client: HttpSyncClient = container.client
+
+    // ---------- 配置门禁 ----------
+    private val _configured = MutableStateFlow(session.isConfigured)
+    val configured: StateFlow<Boolean> = _configured.asStateFlow()
+
+    private val _setup = MutableStateFlow(SetupUiState())
+    val setup: StateFlow<SetupUiState> = _setup.asStateFlow()
+
+    val syncing = engine.syncing
+    val syncError = engine.lastError
+    val pendingSyncCount = repo.pendingSyncCount
+
+    // ---------- UI 状态 ----------
+    private val _toast = MutableStateFlow<ToastMsg?>(null)
+    private val _familyName = MutableStateFlow(session.familyName)
+    private val _currentMemberId = MutableStateFlow(session.currentMemberId)
+    private val _prefs = MutableStateFlow(Prefs())
+
+    private data class Prefs(
+        val recordsSeg: String = "checkup",
+        val measureType: String = "bp",
+        val measurePeriod: MeasurePeriod = MeasurePeriod.Month(todayStr().substring(0, 7)),
+        val trendsTableMode: Boolean = true,
+        val trendDays: Int = 30,
+        val lastGlucoseCtx: String = "fasting",
     )
-    val ui: StateFlow<AppUiState> = _ui.asStateFlow()
 
-    private fun newId(prefix: String) = prefix + UUID.randomUUID().toString().substring(0, 8)
+    @Suppress("UNCHECKED_CAST")
+    val ui: StateFlow<AppUiState> = combine(
+        listOf(
+            repo.membersFlow.map { it as Any? },
+            repo.devicesFlow.map { it as Any? },
+            repo.remindersFlow.map { it as Any? },
+            _currentMemberId.map { it as Any? },
+            _toast.map { it as Any? },
+            _prefs.map { it as Any? },
+            _familyName.map { it as Any? },
+        )
+    ) { arr ->
+        val p = arr[5] as Prefs
+        AppUiState(
+            familyName = arr[6] as String,
+            devices = arr[1] as List<Device>,
+            members = arr[0] as List<Profile>,
+            currentMemberId = arr[3] as String,
+            reminders = arr[2] as Map<String, ReminderSetting>,
+            toast = arr[4] as ToastMsg?,
+            recordsSeg = p.recordsSeg,
+            measureType = p.measureType,
+            measurePeriod = p.measurePeriod,
+            trendsTableMode = p.trendsTableMode,
+            trendDays = p.trendDays,
+            lastGlucoseCtx = p.lastGlucoseCtx,
+        )
+    }.stateInUi(AppUiState("", emptyList(), emptyList(), "", emptyMap()))
 
-    fun toast(text: String) =
-        _ui.update { it.copy(toast = ToastMsg(System.nanoTime(), text)) }
+    private fun <T> Flow<T>.stateInUi(initial: T) =
+        this.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.Eagerly, initial)
 
+    // ---------- toast ----------
+    fun toast(text: String) = _toast.tryEmit(ToastMsg(System.nanoTime(), text)).let { }
     fun clearToast(id: Long) =
-        _ui.update { if (it.toast?.id == id) it.copy(toast = null) else it }
-
-    private fun updateMember(id: String, transform: (Profile) -> Profile) =
-        _ui.update { s -> s.copy(members = s.members.map { if (it.id == id) transform(it) else it }) }
-
-    private fun updateCurrent(transform: (Profile) -> Profile) =
-        updateMember(_ui.value.currentMemberId, transform)
+        _toast.update { if (it?.id == id) null else it }
 
     // ---------- 导航/偏好 ----------
-    fun selectMember(id: String) = _ui.update { it.copy(currentMemberId = id) }
-    fun setRecordsSeg(seg: String) = _ui.update { it.copy(recordsSeg = seg) }
-    fun setMeasureType(type: String) = _ui.update { it.copy(measureType = type) }
-    fun setMeasurePeriod(period: MeasurePeriod) = _ui.update { it.copy(measurePeriod = period) }
-    fun setTrendsTableMode(table: Boolean) = _ui.update { it.copy(trendsTableMode = table) }
-    fun setTrendDays(days: Int) = _ui.update { it.copy(trendDays = days) }
+    fun selectMember(id: String) {
+        _currentMemberId.value = id
+        session.currentMemberId = id
+    }
+    fun setRecordsSeg(seg: String) = _prefs.update { it.copy(recordsSeg = seg) }
+    fun setMeasureType(type: String) = _prefs.update { it.copy(measureType = type) }
+    fun setMeasurePeriod(period: MeasurePeriod) = _prefs.update { it.copy(measurePeriod = period) }
+    fun setTrendsTableMode(table: Boolean) = _prefs.update { it.copy(trendsTableMode = table) }
+    fun setTrendDays(days: Int) = _prefs.update { it.copy(trendDays = days) }
 
     // ---------- 测量 ----------
-    fun addMeasurement(m: Measurement) {
-        updateCurrent { it.copy(measurements = listOf(m) + it.measurements) }
-        if (m.glucoseContext != null) _ui.update { s -> s.copy(lastGlucoseCtx = m.glucoseContext) }
-    }
-
-    fun updateMeasurement(m: Measurement) = updateCurrent {
-        it.copy(measurements = it.measurements.map { x -> if (x.id == m.id) m else x })
-    }
+    fun addMeasurement(m: Measurement) = launch { repo.addMeasurement(currentId(), m) }
+    fun updateMeasurement(m: Measurement) = launch { repo.updateMeasurement(m) }
 
     /** 软删除（契约：docs/02 §1 一律软删） */
-    fun deleteMeasurement(id: String) = updateCurrent {
-        it.copy(measurements = it.measurements.map { x -> if (x.id == id) x.copy(deleted = true) else x })
-    }
+    fun deleteMeasurement(id: String) = launch { repo.deleteMeasurement(id) }
 
     // ---------- 便签 ----------
-    fun toggleNote(noteId: String) = updateCurrent {
-        it.copy(notes = it.notes.map { n -> if (n.id == noteId) n.copy(done = !n.done) else n })
-    }
+    fun toggleNote(noteId: String) = launch { repo.toggleNote(noteId) }
+    fun addNote(text: String, remindAt: String?, target: String?) =
+        launch { repo.addNote(currentId(), text, remindAt, target) }
 
-    fun addNote(text: String, remindAt: String?, target: String?) = updateCurrent {
-        val me = _ui.value.devices.firstOrNull { d -> d.self }?.displayName ?: "爸爸"
-        it.copy(
-            notes = listOf(
-                Note(newId("n"), text, done = false, remindAt = remindAt,
-                    remindTargetName = target, createdBy = me, createdAtLabel = "今天")
-            ) + it.notes
-        )
-    }
+    // ---------- 用药 ----------
+    fun saveMed(item: MedicationItem) = launch { repo.saveMed(item) }
 
-    // ---------- 用药：编辑单条 ----------
-    fun saveMed(item: MedicationItem) = updateCurrent {
-        it.copy(meds = it.meds.map { m -> if (m.id == item.id) item else m })
-    }
-
-    /** 记用药变化：核对式一次保存（契约：docs/05 §5；docs/02 §3.9 改量链） */
+    /** 记用药变化：计数即时返回（页面 toast 用），写库与上行异步完成（01 §5.2 改量链） */
     fun saveMedChange(
         date: String,
         note: String,
         linkedEventId: String?,
         stops: Set<String>,
-        adjustments: Map<String, Pair<String, Set<String>>>, // medId -> (dosage, slots)
+        adjustments: Map<String, Pair<String, Set<String>>>,
         additions: List<MedicationItem>,
     ): Triple<Int, Int, Int> {
-        val changeId = newId("c")
-        updateCurrent { p ->
-            val meds = p.meds.toMutableList()
-            stops.forEach { id ->
-                val i = meds.indexOfFirst { it.id == id }
-                if (i >= 0) meds[i] = meds[i].copy(endDate = date)
-            }
-            adjustments.forEach { (id, adj) ->
-                val i = meds.indexOfFirst { it.id == id }
-                if (i >= 0) {
-                    val old = meds[i]
-                    meds[i] = old.copy(endDate = date)
-                    meds.add(
-                        old.copy(
-                            id = newId("m"), dosageText = adj.first.ifBlank { old.dosageText },
-                            doseSlots = if (adj.second.isEmpty()) old.doseSlots else adj.second.toList(),
-                            startDate = date, endDate = null,
-                            supersedesId = id, changeId = changeId,
-                        )
-                    )
-                }
-            }
-            additions.filter { it.name.isNotBlank() }.forEach { n ->
-                meds.add(n.copy(startDate = date, changeId = changeId))
-            }
-            val total = stops.size + adjustments.size + additions.count { it.name.isNotBlank() }
-            val changes = if (total > 0) {
-                listOf(MedChange(changeId, date, note, linkedEventId)) + p.changes
-            } else p.changes
-            p.copy(meds = meds, changes = changes)
-        }
+        launch { repo.saveMedChange(currentId(), date, note, linkedEventId, stops, adjustments, additions) }
         return Triple(stops.size, adjustments.size, additions.count { it.name.isNotBlank() })
     }
 
     // ---------- 今日用药 ----------
-    fun upsertDaily(item: DailyMedItem) = updateCurrent { p ->
-        if (p.daily.any { it.id == item.id }) {
-            p.copy(daily = p.daily.map { if (it.id == item.id) item else it })
-        } else p.copy(daily = p.daily + item)
-    }
+    fun upsertDaily(item: DailyMedItem) = launch { repo.upsertDaily(currentId(), item) }
+    fun deleteDaily(id: String) = launch { repo.deleteDaily(id) }
 
-    fun deleteDaily(id: String) = updateCurrent { p ->
-        p.copy(daily = p.daily.filterNot { it.id == id })
-    }
-
-    fun newDailyId() = newId("dl")
-    fun newMedId() = newId("m")
+    fun newDailyId() = UUID.randomUUID().toString()
+    fun newMedId() = UUID.randomUUID().toString()
 
     // ---------- 重点清单 ----------
-    fun addWatch(name: String) = updateCurrent { p ->
-        if (p.watchlist.any { it.canonicalName == name }) p
-        else p.copy(watchlist = p.watchlist + WatchItem(name, listOf(name)))
-    }
-
-    // ---------- 复查导入 ----------
-    fun importEvent(event: CheckupEvent) = updateCurrent {
-        it.copy(events = listOf(event) + it.events)
-    }
+    fun addWatch(name: String) = launch { repo.addWatch(currentId(), name) }
 
     // ---------- 我的：成员/设备/提醒 ----------
     fun saveProfile(id: String?, name: String, relation: String, gender: String, birth: String, note: String): String {
-        return if (id != null) {
-            updateMember(id) {
-                it.copy(name = name, relation = relation, gender = gender, birthDate = birth, profileNote = note)
+        val nid = id ?: UUID.randomUUID().toString()
+        launch { repo.saveProfile(nid, name, relation, gender, birth, note) }
+        return nid
+    }
+
+    fun revokeDevice(id: String) = toast("一期暂不支持撤销设备（待服务端通道）")
+
+    fun addReminderTime(memberId: String, kind: String) = launch { repo.addReminderTime(memberId, kind) }
+    fun removeReminderTime(memberId: String, kind: String, index: Int) =
+        launch { repo.removeReminderTime(memberId, kind, index) }
+
+    fun currentReminder(): ReminderSetting =
+        ui.value.reminders[ui.value.currentMemberId] ?: ReminderSetting()
+
+    fun setFamilyName(name: String) {
+        _familyName.value = name
+        session.familyName = name
+    }
+
+    // ---------- 同步 ----------
+    fun syncNow() = engine.kickPull()
+
+    // ---------- 复查导入（03：dry_run 预检 → 正式导入） ----------
+    fun importDryRun(text: String, onResult: (Result<ImportResult>) -> Unit) = launch {
+        onResult(runCatching { repo.importDryRun(text) })
+    }
+
+    fun importSubmit(text: String, onResult: (Result<ImportResult>) -> Unit) = launch {
+        onResult(runCatching { repo.importSubmit(text) })
+    }
+
+    // ---------- 首配 / 换绑 ----------
+    fun setup(server: String, secret: String, displayName: String) {
+        if (server.isBlank() || secret.isBlank() || displayName.isBlank()) {
+            _setup.value = SetupUiState(error = "服务器地址、家庭口令、署名都要填")
+            return
+        }
+        launch {
+            _setup.value = SetupUiState(loading = true)
+            try {
+                val r = client.auth(server.trimEnd('/'), secret, displayName)
+                session.server = server
+                session.secret = secret
+                session.token = r.token
+                session.deviceId = r.deviceId
+                session.deviceName = displayName
+                session.familyId = r.familyId
+                session.lastSeq = 0
+                engine.pullAll()
+                _configured.value = true
+                _setup.value = SetupUiState()
+            } catch (e: ApiException) {
+                _setup.value = SetupUiState(error = e.message)
+            } catch (e: Exception) {
+                _setup.value = SetupUiState(error = "连接失败：${e.message ?: "请检查服务器地址与网络"}")
             }
-            id
-        } else {
-            val nid = newId("u")
-            _ui.update { s ->
-                s.copy(members = s.members + Profile(nid, name, relation, gender, birth, note))
-            }
-            nid
         }
     }
 
-    fun revokeDevice(id: String) =
-        _ui.update { s -> s.copy(devices = s.devices.filterNot { it.id == id }) }
-
-    fun addReminderTime(memberId: String, kind: String) = _ui.update { s ->
-        val r = s.reminders[memberId] ?: ReminderSetting()
-        val nr = if (kind == "med") r.copy(medTimes = r.medTimes + "12:00")
-        else r.copy(measureTimes = r.measureTimes + "12:00")
-        s.copy(reminders = s.reminders + (memberId to nr))
+    /** 换绑（清空本地镜像后重新配置；原家庭数据仅存在服务器） */
+    fun reconfigure() = launch {
+        session.resetAuth()
+        container.db.clearAllTables()
+        _configured.value = false
     }
 
-    fun removeReminderTime(memberId: String, kind: String, index: Int) = _ui.update { s ->
-        val r = s.reminders[memberId] ?: return@update s
-        val nr = if (kind == "med") r.copy(medTimes = r.medTimes.filterIndexed { i, _ -> i != index })
-        else r.copy(measureTimes = r.measureTimes.filterIndexed { i, _ -> i != index })
-        s.copy(reminders = s.reminders + (memberId to nr))
-    }
+    private fun currentId(): String = ui.value.currentMember.id
 
-    fun currentReminder(): ReminderSetting =
-        _ui.value.reminders[_ui.value.currentMemberId] ?: ReminderSetting()
+    /** 账号页展示用会话信息 */
+    data class SessionInfo(val server: String, val deviceName: String, val familyId: String)
+    fun sessionInfo() = SessionInfo(session.server, session.deviceName, session.familyId)
+
+    /** 本机设备令牌（API 令牌页展示/复制；03 §2 Bearer 凭证） */
+    fun deviceToken(): String = session.token
+
+    private fun launch(block: suspend () -> Unit) = viewModelScope.launch { block() }.let { }
 }
