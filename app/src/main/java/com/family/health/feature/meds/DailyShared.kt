@@ -36,9 +36,14 @@ import com.family.health.ui.components.FhButton
 import com.family.health.ui.components.FhTextField
 import com.family.health.ui.theme.FhColors
 
-/** 今日用药卡内容（概览页复用）：西药按时段分组 + 中药计数行 */
+/** 今日用药卡内容（概览页复用）：时段分区 + 每味药勾选（本机按日清零，不写库） */
 @Composable
-fun DailyMedList(items: List<DailyMedItem>, onItemClick: (DailyMedItem) -> Unit) {
+fun DailyMedList(
+    items: List<DailyMedItem>,
+    checks: Set<String>,
+    onToggleCheck: (String) -> Unit,
+    onItemClick: (DailyMedItem) -> Unit,
+) {
     if (items.isEmpty()) {
         Text(
             "还没设置今日用药，点右上角\"管理\"添加",
@@ -51,46 +56,43 @@ fun DailyMedList(items: List<DailyMedItem>, onItemClick: (DailyMedItem) -> Unit)
     Labels.SLOTS.forEach { (key, label) ->
         val inSlot = west.filter { key in it.doseSlots }
         if (inSlot.isNotEmpty()) {
-            Row(modifier = Modifier.padding(vertical = 5.dp)) {
-                DoseSlotBadge(label, false)
-                Column(modifier = Modifier.weight(1f)) {
-                    inSlot.forEach { x ->
-                        DailyDoseRow(
-                            name = x.name, dose = x.doseText,
-                            stock = x.stockQty?.let { s ->
-                                "剩${s.toInt()}${x.stockUnit}" + (x.daysLeft?.let { " · 约${it}天" } ?: "")
-                            } ?: "余量未记",
-                            onClick = { onItemClick(x) },
-                        )
-                    }
-                }
-            }
-        }
-    }
-    tcm.forEach { x ->
-        Row(modifier = Modifier.padding(vertical = 5.dp)) {
-            DoseSlotBadge("药", true)
-            Column(modifier = Modifier.weight(1f)) {
-                DailyDoseRow(
-                    name = x.name, dose = "剩 ${x.tcmPacks?.toInt() ?: 0} 副",
-                    stock = "这副第 ${x.tcmUsedDays} 天 / 共 ${x.tcmDaysPerPack} 天",
+            SlotHeader(label, false)
+            inSlot.forEach { x ->
+                DailyCheckRow(
+                    checked = x.id in checks,
+                    name = x.name, dose = x.doseText,
+                    stock = x.stockQty?.let { s ->
+                        "剩${s.toInt()}${x.stockUnit}" + (x.daysLeft?.let { " · 约${it}天" } ?: "")
+                    } ?: "余量未记",
+                    onToggle = { onToggleCheck(x.id) },
                     onClick = { onItemClick(x) },
                 )
             }
         }
     }
+    if (tcm.isNotEmpty()) {
+        SlotHeader("中药", true)
+        tcm.forEach { x ->
+            DailyCheckRow(
+                checked = x.id in checks,
+                name = x.name, dose = "剩 ${x.tcmPacks?.toInt() ?: 0} 副",
+                stock = "这副第 ${x.tcmUsedDays} 天 / 共 ${x.tcmDaysPerPack} 天",
+                onToggle = { onToggleCheck(x.id) },
+                onClick = { onItemClick(x) },
+            )
+        }
+    }
 }
 
 @Composable
-private fun DoseSlotBadge(label: String, tcm: Boolean) {
-    Box(
-        contentAlignment = Alignment.Center,
+private fun SlotHeader(label: String, tcm: Boolean) {
+    Row(
         modifier = Modifier
-            .padding(top = 2.dp, end = 10.dp)
-            .width(34.dp)
-            .height(22.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(if (tcm) FhColors.TcmSoft else FhColors.PrimarySoft),
+            .padding(top = 8.dp, bottom = 3.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(7.dp))
+            .background(if (tcm) FhColors.TcmSoft else FhColors.PrimarySoft)
+            .padding(horizontal = 8.dp, vertical = 3.dp),
     ) {
         Text(
             label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
@@ -100,16 +102,36 @@ private fun DoseSlotBadge(label: String, tcm: Boolean) {
 }
 
 @Composable
-private fun DailyDoseRow(name: String, dose: String, stock: String, onClick: () -> Unit) {
+private fun DailyCheckRow(
+    checked: Boolean, name: String, dose: String, stock: String,
+    onToggle: () -> Unit, onClick: () -> Unit,
+) {
     Row(
-        verticalAlignment = Alignment.Bottom,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
     ) {
-        Text(name, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-        Spacer(Modifier.width(8.dp))
-        Text(dose, fontSize = 14.sp, color = FhColors.Text2)
-        Spacer(Modifier.weight(1f))
-        Text(stock, fontSize = 12.sp, color = FhColors.Text2)
+        androidx.compose.material3.Checkbox(
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = FhColors.Primary),
+            modifier = Modifier.padding(end = 2.dp),
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable(onClick = onClick),
+        ) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    name, fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                    color = if (checked) FhColors.Text2 else FhColors.Text,
+                    textDecoration = if (checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(dose, fontSize = 13.sp, color = FhColors.Text2)
+            }
+        }
+        Text(stock, fontSize = 11.sp, color = FhColors.Text2)
     }
 }
 
@@ -150,10 +172,10 @@ fun DailyEditSheet(
             } else {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     FhTextField(dose, { dose = it }, "每次用量", Modifier.weight(1f))
-                    FhTextField(daily, { daily = it }, "每日用量（/天，算天数用）", Modifier.weight(1f), number = true)
+                    FhTextField(daily, { daily = it }, "每日用量/天", Modifier.weight(1f), number = true)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FhTextField(stock, { stock = it }, "剩余量（可空）", Modifier.weight(1f), number = true)
+                    FhTextField(stock, { stock = it }, "剩余量", Modifier.weight(1f), number = true)
                     FhTextField(unit, { unit = it }, "单位", Modifier.weight(1f))
                 }
                 FieldLabel("服用时段")

@@ -39,7 +39,7 @@ fun AccountScreen(vm: AppViewModel, nav: NavHostController) {
 
     Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
         PageTitle("服务器与账号", onBack = { nav.popBackStack() })
-        PageSub("连接与同步状态；家庭名仅本机显示")
+        PageSub("连接与同步状态")
 
         FhCard {
             KvRow("服务器") { Text(session.server, fontSize = 14.sp, color = FhColors.Text) }
@@ -63,7 +63,7 @@ fun AccountScreen(vm: AppViewModel, nav: NavHostController) {
         }
 
         FhCard {
-            FhTextField(familyName, { familyName = it }, "家庭名（本机显示）")
+            FhTextField(familyName, { familyName = it }, "家庭名")
             FhButton("保存家庭名", onClick = {
                 vm.setFamilyName(familyName.ifBlank { "我的家庭" })
                 vm.toast("已保存")

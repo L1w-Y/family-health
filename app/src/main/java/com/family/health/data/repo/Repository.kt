@@ -377,14 +377,14 @@ class Repository(
         engine.kickPush()
     }
 
-    suspend fun addNote(profileId: String, text: String, remindAtMmDdHm: String?, targetName: String?) {
-        val remindMs = remindAtMmDdHm?.let { mmDdHmToMs(it) }
+    /** 新建便签（id 由调用方预生成，便于本机提醒调度绑定；remindAtMs 为精确触发点） */
+    suspend fun addNote(id: String, profileId: String, text: String, remindAtMs: Long?, targetName: String?) {
         val targetId = targetName?.let { name ->
             db.deviceDao().all().firstOrNull { it.displayName == name }?.id
         }
         val e = NoteEntity(
-            id = uuid(), profileId = profileId, text = text, done = false,
-            remindAt = remindMs, tzOffsetMin = remindMs?.let { deviceTzOffsetMin() },
+            id = id, profileId = profileId, text = text, done = false,
+            remindAt = remindAtMs, tzOffsetMin = remindAtMs?.let { deviceTzOffsetMin() },
             remindTargetsJson = targetId?.let { stringsToJsonArray(listOf(it)) } ?: "[]",
             createdBy = session.deviceId, createdAtMs = System.currentTimeMillis(),
             deleted = false, seq = 0,
@@ -393,6 +393,16 @@ class Repository(
         db.withTransaction {
             db.noteDao().upsertAll(listOf(e))
             db.outboxDao().insertAll(outboxOps(key, listOf(Triple("notes", "insert", noteToRow(e)))))
+        }
+        engine.kickPush()
+    }
+
+    suspend fun deleteNote(noteId: String) {
+        val old = db.noteDao().byId(noteId) ?: return
+        val key = uuid()
+        db.withTransaction {
+            db.noteDao().upsertAll(listOf(old.copy(deleted = true)))
+            db.outboxDao().insertAll(outboxOps(key, listOf(Triple("notes", "delete", tombstoneRow(noteId)))))
         }
         engine.kickPush()
     }
@@ -407,20 +417,21 @@ class Repository(
         engine.kickPush()
     }
 
-    suspend fun addReminderTime(memberId: String, kind: String) {
+    suspend fun addReminderTime(memberId: String, kind: String, time: String = "12:00") {
         val type = if (kind == "med") "medication" else "measure"
         val rows = db.reminderDao().byProfile(memberId)
         val row = rows.firstOrNull { it.type == type }
+        if (row != null && jsonArrayToStrings(row.timesJson).contains(time)) return // 已存在
         val key = uuid()
         db.withTransaction {
             if (row != null) {
-                val e = row.copy(timesJson = stringsToJsonArray(jsonArrayToStrings(row.timesJson) + "12:00"))
+                val e = row.copy(timesJson = stringsToJsonArray(jsonArrayToStrings(row.timesJson) + time))
                 db.reminderDao().upsertAll(listOf(e))
                 db.outboxDao().insertAll(outboxOps(key, listOf(Triple("reminders", "update", reminderToRow(e)))))
             } else {
                 val e = ReminderEntity(
                     id = uuid(), profileId = memberId, type = type,
-                    timesJson = stringsToJsonArray(listOf("12:00")),
+                    timesJson = stringsToJsonArray(listOf(time)),
                     measureType = if (type == "measure") "bp" else null,
                     advanceDaysJson = null, enabled = true, deleted = false, seq = 0,
                 )

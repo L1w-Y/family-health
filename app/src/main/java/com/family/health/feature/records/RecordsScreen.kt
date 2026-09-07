@@ -308,7 +308,7 @@ private fun MeasurementEditDialog(
                 if (initial.type == "bp") {
                     FhTextField(sys, { sys = it }, "高压 (mmHg)", number = true)
                     FhTextField(dia, { dia = it }, "低压 (mmHg)", number = true)
-                    FhTextField(hr, { hr = it }, "心率（可空）", number = true)
+                    FhTextField(hr, { hr = it }, "心率", number = true)
                 } else {
                     FhTextField(glu, { glu = it }, "血糖 (mmol/L)", number = true)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

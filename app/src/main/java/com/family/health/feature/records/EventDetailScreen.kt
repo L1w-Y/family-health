@@ -39,15 +39,10 @@ fun EventDetailScreen(vm: AppViewModel, nav: NavHostController, eventId: String)
             EmptyHint("事件不存在")
             return@Column
         }
-        PageTitle("${event.checkupDate} 复查", onBack = { nav.popBackStack() })
-        FhCard {
-            KvRow("医院") { Text(event.hospital, fontSize = 14.sp, color = FhColors.Text) }
-            KvRow("科室") { Text(event.department, fontSize = 14.sp, color = FhColors.Text) }
-            if (event.note.isNotEmpty()) {
-                KvRow("备注") { Text(event.note, fontSize = 14.sp, color = FhColors.Text) }
-            }
-            event.nextCheckupDate?.let { next ->
-                KvRow("下次复查") { Text(next, fontSize = 14.sp, color = FhColors.Text) }
+        PageTitle(event.checkupDate, onBack = { nav.popBackStack() })
+        if (event.note.isNotEmpty()) {
+            FhCard {
+                Text(event.note, fontSize = 14.sp, color = FhColors.Text, lineHeight = 22.sp)
             }
         }
         if (event.medChangeSummary.isNotEmpty()) {

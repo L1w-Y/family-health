@@ -72,10 +72,25 @@ fun NotesScreen(vm: AppViewModel, nav: NavHostController) {
                         if (n.remindAt != null) {
                             RemindChip("${n.remindAt} · 提醒 ${n.remindTargetName ?: "全家"}")
                         }
-                        Text(
-                            "${n.createdBy} · ${n.createdAtLabel}",
-                            fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.padding(top = 6.dp),
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(top = 6.dp),
+                        ) {
+                            Text(
+                                "${n.createdBy} · ${n.createdAtLabel}",
+                                fontSize = 12.sp, color = FhColors.Text2,
+                            )
+                            Spacer(Modifier.weight(1f))
+                            Text(
+                                "删除", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Amber,
+                                modifier = Modifier
+                                    .clickable {
+                                        vm.deleteNote(n.id)
+                                        vm.toast("已删除")
+                                    }
+                                    .padding(horizontal = 4.dp),
+                            )
+                        }
                     }
                 }
             }
@@ -86,14 +101,49 @@ fun NotesScreen(vm: AppViewModel, nav: NavHostController) {
 @Composable
 fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
     var text by remember { mutableStateOf("") }
-    var remindAt by remember { mutableStateOf("") }
+    var date by remember { mutableStateOf<String?>(null) }
+    var time by remember { mutableStateOf<String?>(null) }
+    var repeatDaily by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf<String?>(null) }
 
     Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
         PageTitle("新建便签", onBack = { nav.popBackStack() })
         FhTextField(text, { text = it }, "内容", multiline = true, placeholder = "如：下周三上午去取药")
-        FhTextField(remindAt, { remindAt = it }, "提醒时刻（可空）", placeholder = "09-11 18:00")
+
+        Text("提醒时刻", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+            modifier = Modifier.padding(bottom = 6.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            FChip(date ?: "选日期") {
+                val now = java.time.LocalDate.now()
+                android.app.DatePickerDialog(
+                    context, { _, y, m, d -> date = "%04d-%02d-%02d".format(y, m + 1, d) },
+                    now.year, now.monthValue - 1, now.dayOfMonth,
+                ).show()
+            }
+            Spacer(Modifier.width(8.dp))
+            FChip(time ?: "选时间") {
+                val now = java.time.LocalTime.now()
+                android.app.TimePickerDialog(
+                    context, { _, h, mi -> time = "%02d:%02d".format(h, mi) },
+                    now.hour, now.minute, true,
+                ).show()
+            }
+            if (date != null || time != null) {
+                Spacer(Modifier.width(8.dp))
+                FChip("清除") { date = null; time = null }
+            }
+        }
+        if (date != null && time != null) {
+            Row(modifier = Modifier.padding(top = 8.dp)) {
+                FChip("单次", on = !repeatDaily) { repeatDaily = false }
+                Spacer(Modifier.width(8.dp))
+                FChip("每天", on = repeatDaily) { repeatDaily = true }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+
         Text("提醒对象", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
             modifier = Modifier.padding(bottom = 6.dp))
         Row {
@@ -109,7 +159,11 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
                 vm.toast("请填写内容")
                 return@FhButton
             }
-            vm.addNote(text.trim(), remindAt.ifBlank { null }, target)
+            if ((date == null) != (time == null)) {
+                vm.toast("日期和时间要一起选")
+                return@FhButton
+            }
+            vm.addNote(text.trim(), date, time, repeatDaily, target)
             vm.toast("已保存")
             nav.popBackStack()
         })

@@ -19,6 +19,7 @@ import com.family.health.data.repo.Repository
 import com.family.health.syncclient.ApiException
 import com.family.health.syncclient.HttpSyncClient
 import com.family.health.syncclient.ImportResult
+import com.family.health.util.dateTimeToMs
 import com.family.health.util.todayStr
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,8 +158,83 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---------- 便签 ----------
     fun toggleNote(noteId: String) = launch { repo.toggleNote(noteId) }
-    fun addNote(text: String, remindAt: String?, target: String?) =
-        launch { repo.addNote(currentId(), text, remindAt, target) }
+    fun deleteNote(noteId: String) = launch {
+        repo.deleteNote(noteId)
+        container.reminderScheduler.cancel(noteId.hashCode())
+    }
+
+    /** 新建便签：可选日期+时刻（到点本机通知，支持单次/每天） */
+    fun addNote(text: String, date: String?, time: String?, repeatDaily: Boolean, target: String?) {
+        val noteId = UUID.randomUUID().toString()
+        val ms = if (!date.isNullOrBlank() && !time.isNullOrBlank()) {
+            runCatching { dateTimeToMs("$date $time") }.getOrNull()
+        } else null
+        launch { repo.addNote(noteId, currentId(), text, ms, target) }
+        if (ms != null) {
+            container.reminderScheduler.schedule(
+                com.family.health.notif.LocalReminder(
+                    id = noteId.hashCode(), title = "便签提醒",
+                    text = text.take(60), triggerAtMs = ms, repeatDaily = repeatDaily, kind = "note",
+                )
+            )
+        }
+    }
+
+    // ---------- 今日用药勾选（本机视觉，按日清零） ----------
+    private val _checkTick = MutableStateFlow(0L)
+    val checkTick: StateFlow<Long> = _checkTick.asStateFlow()
+    fun dailyCheckedSet(): Set<String> = container.dailyChecks.checkedSet()
+    fun toggleDailyChecked(itemId: String) {
+        container.dailyChecks.toggle(itemId)
+        _checkTick.value = System.nanoTime()
+    }
+
+    // ---------- 测量提醒（本机每天闹钟 + reminders 表） ----------
+    /** 概览快捷添加每日测量提醒 */
+    fun addMeasureReminderTime(time: String) {
+        val memberId = ui.value.currentMember.id
+        launch { repo.addReminderTime(memberId, "measure", time) }
+        scheduleMeasureDaily(time)
+    }
+
+    private fun scheduleMeasureDaily(time: String) {
+        val todayMs = runCatching { dateTimeToMs("${todayStr()} $time") }.getOrNull() ?: return
+        container.reminderScheduler.schedule(
+            com.family.health.notif.LocalReminder(
+                id = ("measure" + time).hashCode(), title = "测量提醒",
+                text = "该测血压/血糖了",
+                triggerAtMs = com.family.health.notif.ReminderScheduler.nextDailyAt(
+                    todayMs, System.currentTimeMillis()
+                ),
+                repeatDaily = true, kind = "measure", timeLabel = time,
+            )
+        )
+    }
+
+    /** 启动/数据变化后按 reminders 表对齐测量类本机闹钟 */
+    fun rescheduleMeasureReminders() {
+        val wanted = ui.value.reminders.values.flatMap { it.measureTimes }.toSet()
+        container.reminderScheduler.store().all()
+            .filter { it.kind == "measure" && it.timeLabel !in wanted }
+            .forEach { container.reminderScheduler.cancel(it.id) }
+        wanted.forEach { scheduleMeasureDaily(it) }
+    }
+
+    /** 今日单次快捷测量提醒 */
+    fun quickRemindToday(time: String) {
+        val ms = runCatching { dateTimeToMs("${todayStr()} $time") }.getOrNull() ?: return
+        if (ms <= System.currentTimeMillis()) {
+            toast("该时刻已过")
+            return
+        }
+        container.reminderScheduler.schedule(
+            com.family.health.notif.LocalReminder(
+                id = ("measure_once" + time).hashCode(), title = "测量提醒",
+                text = "该测血压/血糖了", triggerAtMs = ms, repeatDaily = false, kind = "measure_once",
+            )
+        )
+        toast("已设今天 $time 提醒")
+    }
 
     // ---------- 用药 ----------
     fun saveMed(item: MedicationItem) = launch { repo.saveMed(item) }
@@ -196,8 +272,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun revokeDevice(id: String) = toast("一期暂不支持撤销设备（待服务端通道）")
 
     fun addReminderTime(memberId: String, kind: String) = launch { repo.addReminderTime(memberId, kind) }
-    fun removeReminderTime(memberId: String, kind: String, index: Int) =
+    fun removeReminderTime(memberId: String, kind: String, index: Int) {
+        if (kind == "measure") {
+            ui.value.reminders[memberId]?.measureTimes?.getOrNull(index)
+                ?.let { container.reminderScheduler.cancel(("measure" + it).hashCode()) }
+        }
         launch { repo.removeReminderTime(memberId, kind, index) }
+    }
 
     fun currentReminder(): ReminderSetting =
         ui.value.reminders[ui.value.currentMemberId] ?: ReminderSetting()

@@ -152,7 +152,7 @@ fun DevicesScreen(vm: AppViewModel, nav: NavHostController) {
     Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
         PageTitle("家庭口令与设备", onBack = { nav.popBackStack() })
         FhCard {
-            CardHead("家庭口令", "更换 ›") { vm.toast("更换后所有设备需重新输入（演示）") }
+            CardHead("家庭口令", "更换 ›") { vm.toast("更换后所有设备需重新输入") }
             Text("新设备首次使用需输入家庭口令完成署名", fontSize = 13.sp, color = FhColors.Text2)
         }
         Text(
@@ -194,7 +194,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
 
     Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
         PageTitle("提醒设置", onBack = { nav.popBackStack() })
-        PageSub("当前成员：${member.name}（顶部可切换）· 到点由全家设备本地通知")
+        PageSub("当前成员：${member.name}")
 
         FhCard {
             Text("服药提醒", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
@@ -208,7 +208,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
                 }
                 FChip("＋") {
                     vm.addReminderTime(member.id, "med")
-                    vm.toast("已添加 12:00，可点 × 删除（演示）")
+                    vm.toast("已添加 12:00，可点 × 删除")
                 }
             }
             Text(
@@ -228,7 +228,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
                 }
                 FChip("＋") {
                     vm.addReminderTime(member.id, "measure")
-                    vm.toast("已添加 12:00，可点 × 删除（演示）")
+                    vm.toast("已添加 12:00，可点 × 删除")
                 }
             }
         }
@@ -268,7 +268,7 @@ fun TokenScreen(vm: AppViewModel, nav: NavHostController) {
                     fontSize = 14.sp, color = FhColors.Text,
                 )
             }
-            KvRow("署名") { Text("${session.deviceName}（导入记录将署名该设备）", fontSize = 14.sp, color = FhColors.Text) }
+            KvRow("署名") { Text(session.deviceName, fontSize = 14.sp, color = FhColors.Text) }
         }
         FhButton("复制完整令牌", onClick = {
             clipboard.setText(androidx.compose.ui.text.AnnotatedString(vm.deviceToken()))
@@ -293,7 +293,7 @@ fun ExportScreen(vm: AppViewModel, nav: NavHostController) {
                     Text(m.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
                     Text(
                         "导出 ›", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
-                        modifier = Modifier.clickable { vm.toast("已生成导出包（演示）") },
+                        modifier = Modifier.clickable { vm.toast("导出功能将在后续版本提供") },
                     )
                 }
                 RowLine2("${m.events.size} 次复查 · ${m.measurements.size} 条测量 · ${m.meds.size} 条用药")

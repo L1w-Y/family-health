@@ -90,14 +90,14 @@ fun MeasureFormScreen(vm: AppViewModel, nav: NavHostController, type: String) {
 
     Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
         PageTitle(title, onBack = { nav.popBackStack() })
-        PageSub("${ui.currentMember.name} · 时间默认现在，可改")
+        PageSub(ui.currentMember.name)
 
         if (type == "bp") {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 FhTextField(sys, { sys = it }, "高压 (mmHg)", Modifier.weight(1f), number = true, placeholder = "138")
                 FhTextField(dia, { dia = it }, "低压 (mmHg)", Modifier.weight(1f), number = true, placeholder = "86")
             }
-            FhTextField(hr, { hr = it }, "心率（可空）", number = true, placeholder = "72")
+            FhTextField(hr, { hr = it }, "心率", number = true, placeholder = "72")
         } else {
             FhTextField(glu, { glu = it }, "血糖 (mmol/L)", number = true, placeholder = "6.1")
             Text("测量场景", fontSize = 13.sp, color = FhColors.Text2,
@@ -116,7 +116,7 @@ fun MeasureFormScreen(vm: AppViewModel, nav: NavHostController, type: String) {
             Spacer(Modifier.height(14.dp))
         }
         FhTextField(at, { at = it }, "测量时间")
-        FhTextField(note, { note = it }, "备注（可空）")
+        FhTextField(note, { note = it }, "备注")
         FhButton("保 存", onClick = { save(false) })
         FhButton("保存并再记一条", onClick = { save(true) }, ghost = true)
         Spacer(Modifier.height(20.dp))

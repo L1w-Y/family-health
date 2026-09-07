@@ -78,7 +78,7 @@ fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
             FhTextField(date, { date = it }, "生效日期", Modifier.weight(1f))
             FhTextField(reason, { reason = it }, "事由（备注，自由填写）", Modifier.weight(1f), placeholder = "如：复查后调整、感冒")
         }
-        FieldLabel("关联复查（可空）")
+        FieldLabel("关联复查")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FChip("不关联", on = linkedEventId == null) { linkedEventId = null }
             member.events.forEach { e ->

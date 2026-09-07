@@ -140,6 +140,15 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         com.family.health.feature.setup.SetupScreen(vm)
         return
     }
+
+    // 通知权限（API 33+ 运行时）；测量类本机闹钟与 reminders 表对齐
+    if (android.os.Build.VERSION.SDK_INT >= 33) {
+        val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
+            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+        ) { }
+        LaunchedEffect(Unit) { launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
+    }
+    LaunchedEffect(ui.reminders, ui.currentMemberId) { vm.rescheduleMeasureReminders() }
     var showPlus by rememberSaveable { mutableStateOf(false) }
     var showMemberSwitch by rememberSaveable { mutableStateOf(false) }
 
@@ -205,11 +214,6 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         }
                     }
                 }
-                Text(
-                    "心率是血压的附属可选项，随血压一同记录",
-                    fontSize = 12.sp, color = FhColors.Text2,
-                    modifier = Modifier.padding(start = 2.dp, top = 6.dp),
-                )
                 SheetGroup("阶段性") {
                     Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         SheetAction("💊 记用药变化", Modifier.weight(1f)) {
