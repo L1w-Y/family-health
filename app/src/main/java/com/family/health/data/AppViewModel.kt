@@ -190,6 +190,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // ---------- 测量提醒（本机每天闹钟 + reminders 表） ----------
+    private val SLOT_TIMES = mapOf(
+        "morning" to "08:00", "noon" to "12:00", "evening" to "19:00", "bedtime" to "21:30",
+    )
+
     /** 概览快捷添加每日测量提醒 */
     fun addMeasureReminderTime(time: String) {
         val memberId = ui.value.currentMember.id
@@ -218,6 +222,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             .filter { it.kind == "measure" && it.timeLabel !in wanted }
             .forEach { container.reminderScheduler.cancel(it.id) }
         wanted.forEach { scheduleMeasureDaily(it) }
+    }
+
+    /** 余量只够最后一天时：下次服药前 1 小时本机提醒补药（每味药只排一次） */
+    fun checkLowStockReminders() {
+        val now = System.currentTimeMillis()
+        val nowLabel = "%02d:%02d".format(java.time.LocalTime.now().hour, java.time.LocalTime.now().minute)
+        val store = container.reminderScheduler.store()
+        ui.value.currentMember.daily.forEach { x ->
+            val stock = x.stockQty ?: return@forEach
+            val daily = x.dailyQty ?: return@forEach
+            if (daily <= 0 || stock > daily) return@forEach // 余量 > 1 天用量，无需提醒
+            val id = ("lowstock" + x.id).hashCode()
+            if (store.all().any { it.id == id }) return@forEach
+            val slotsToday = x.doseSlots.mapNotNull { SLOT_TIMES[it] }.filter { it > nowLabel }.sorted()
+            val triggerMs = if (slotsToday.isNotEmpty()) {
+                dateTimeToMs("${todayStr()} ${slotsToday.first()}") - 3600_000
+            } else {
+                val first = x.doseSlots.mapNotNull { SLOT_TIMES[it] }.minOrNull() ?: "08:00"
+                dateTimeToMs("${todayStr()} $first") + 86400_000 - 3600_000
+            }
+            if (triggerMs <= now) return@forEach
+            container.reminderScheduler.schedule(
+                com.family.health.notif.LocalReminder(
+                    id = id, title = "补药提醒",
+                    text = "「${x.name}」只剩最后一天用量，记得补充",
+                    triggerAtMs = triggerMs, repeatDaily = false, kind = "lowstock",
+                )
+            )
+        }
     }
 
     /** 今日单次快捷测量提醒 */

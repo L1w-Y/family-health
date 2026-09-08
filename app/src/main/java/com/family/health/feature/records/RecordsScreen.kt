@@ -1,6 +1,7 @@
 // 契约：docs/05-页面结构与交互.md §4 Tab 2 记录（复查段含重点指标表；测量段统计卡+当日明细）
 package com.family.health.feature.records
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -67,21 +68,24 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
             // 重点指标对比（紧凑表格：行=清单项，列=最近 5 次复查）
             CardHead("重点指标对比", "＋ 添加 ›") { showAddWatch = true }
             val eventsDesc = member.events.sortedByDescending { it.checkupDate }.take(5)
-            FhCard(contentPadding = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+            FhCard(contentPadding = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                 if (member.watchlist.isEmpty()) {
                     EmptyHint("重点清单为空，点右上角\"＋ 添加\"")
                 } else {
-                    Row {
-                        Spacer(Modifier.width(92.dp))
-                        eventsDesc.forEach { e ->
+                    // 表头
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.width(84.dp))
+                        eventsDesc.forEachIndexed { i, e ->
+                            if (i > 0) ColDivider()
                             Text(
-                                mmdd(e.checkupDate), fontSize = 11.sp, color = FhColors.Text2,
+                                mmdd(e.checkupDate), fontSize = 10.5.sp, color = FhColors.Text2,
                                 fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                                modifier = Modifier.weight(1f).padding(vertical = 3.dp),
                             )
                         }
                     }
-                    member.watchlist.forEach { w ->
+                    RowDivider()
+                    member.watchlist.forEachIndexed { wi, w ->
                         val (pts, _) = indicatorPoints(member, w.canonicalName)
                         val byDate = pts.associateBy { it.date }
                         Row(
@@ -89,18 +93,20 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
                             modifier = Modifier.clickable { nav.navigate(Routes.indicator(w.canonicalName)) },
                         ) {
                             Text(
-                                w.canonicalName, fontSize = 12.sp, color = FhColors.Text,
-                                modifier = Modifier.width(92.dp).padding(vertical = 6.dp),
-                                maxLines = 2, lineHeight = 15.sp,
+                                w.canonicalName, fontSize = 11.5.sp, color = FhColors.Text,
+                                modifier = Modifier.width(84.dp).padding(vertical = 4.dp),
+                                maxLines = 2, lineHeight = 14.sp,
                             )
-                            eventsDesc.forEach { e ->
+                            eventsDesc.forEachIndexed { i, e ->
+                                if (i > 0) ColDivider()
                                 Text(
                                     byDate[e.checkupDate]?.displayValue ?: "—",
-                                    fontSize = 12.sp, color = FhColors.Text, textAlign = TextAlign.Center,
-                                    modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+                                    fontSize = 11.5.sp, color = FhColors.Text, textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f).padding(vertical = 4.dp),
                                 )
                             }
                         }
+                        if (wi < member.watchlist.lastIndex) RowDivider()
                     }
                 }
             }
@@ -176,6 +182,16 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
         AddWatchSheet(vm, onDone = { showAddWatch = false })
     }
 }
+
+@Composable
+private fun ColDivider() = androidx.compose.foundation.layout.Box(
+    Modifier.width(1.dp).height(12.dp).background(FhColors.Line)
+)
+
+@Composable
+private fun RowDivider() = androidx.compose.foundation.layout.Box(
+    Modifier.fillMaxWidth().height(1.dp).background(FhColors.Line)
+)
 
 /** 测量统计卡：最新值 + 均值/最高/最低 + 按日数值行（点行看当日明细） */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)

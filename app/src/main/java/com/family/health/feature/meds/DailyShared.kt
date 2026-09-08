@@ -55,7 +55,7 @@ fun DailyMedList(
 
     // 表头
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 1.dp)) {
-        Spacer(Modifier.width(46.dp))
+        Spacer(Modifier.width(64.dp))
         Text("药品", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
             modifier = Modifier.weight(1.35f))
         Text("用量", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
@@ -72,6 +72,7 @@ fun DailyMedList(
         MedTableRow(
             checked = x.id in checks,
             barColor = FhColors.TcmText,
+            barLabel = "药",
             nameColor = FhColors.TcmText,
             name = x.name, dose = "每副 ${x.tcmDaysPerPack} 天",
             stock = "${x.tcmPacks?.toInt() ?: 0} 副",
@@ -80,12 +81,13 @@ fun DailyMedList(
         )
     }
 
-    // 西药：按首个时段归组，左侧竖条按时段着色
-    Labels.SLOTS.forEach { (key, _) ->
-        west.filter { m -> m.doseSlots.firstOrNull() == key }.forEach { x ->
+    // 西药：药在每个所属时段各显示一行（早/中/晚/睡前 字样 + 竖条着色）
+    Labels.SLOTS.forEach { (key, label) ->
+        west.filter { key in it.doseSlots }.forEach { x ->
             MedTableRow(
                 checked = x.id in checks,
                 barColor = slotBarColor(key),
+                barLabel = label,
                 nameColor = null,
                 name = x.name, dose = x.doseText,
                 stock = x.stockQty?.let { s -> "${s.toInt()}${x.stockUnit}" } ?: "—",
@@ -105,7 +107,8 @@ private fun slotBarColor(key: String): androidx.compose.ui.graphics.Color = when
 
 @Composable
 private fun MedTableRow(
-    checked: Boolean, barColor: androidx.compose.ui.graphics.Color, nameColor: androidx.compose.ui.graphics.Color?,
+    checked: Boolean, barColor: androidx.compose.ui.graphics.Color, barLabel: String,
+    nameColor: androidx.compose.ui.graphics.Color?,
     name: String, dose: String, stock: String, days: String,
     onToggle: () -> Unit,
 ) {
@@ -126,18 +129,25 @@ private fun MedTableRow(
                 colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = FhColors.Primary),
             )
         }
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .height(30.dp)
-                .clip(RoundedCornerShape(2.dp))
-                .background(barColor),
-        )
+        // 时段竖条 + 字样
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.width(20.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height(16.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(barColor),
+            )
+            Text(barLabel, fontSize = 9.sp, color = barColor, fontWeight = FontWeight.Bold)
+        }
         Text(
             name, fontSize = 13.sp, fontWeight = FontWeight.Bold,
             color = nameColor ?: if (checked) FhColors.Text2 else FhColors.Text,
             textDecoration = if (checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-            modifier = Modifier.weight(1.35f).padding(start = 6.dp),
+            modifier = Modifier.weight(1.35f).padding(start = 4.dp),
             maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
         )
         Text(dose, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(1f))

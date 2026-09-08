@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
@@ -104,17 +105,26 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
             if (member.notes.isEmpty()) {
                 Text("暂无便签，点这里写一条 ›", fontSize = 13.sp, color = FhColors.Text2)
             }
-            member.notes.filter { !it.done }.take(5).forEach { n ->
+            member.notes.filter { !it.done }.take(5).forEachIndexed { i, n ->
                 Row(
                     verticalAlignment = Alignment.Top,
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 5.dp),
                 ) {
-                    if (n.remindAt != null) {
-                        Text("⏰", fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp, top = 1.dp))
-                    }
+                    // 无提醒也占位，保持文本对齐
+                    Text(
+                        if (n.remindAt != null) "⏰" else "",
+                        fontSize = 12.sp,
+                        modifier = Modifier.width(20.dp).padding(top = 1.dp),
+                    )
                     Text(
                         n.text, fontSize = 13.5.sp, color = FhColors.Text, lineHeight = 20.sp,
                         modifier = Modifier.weight(1f),
+                    )
+                }
+                if (i < member.notes.filter { !it.done }.take(5).lastIndex) {
+                    androidx.compose.foundation.layout.Box(
+                        Modifier.fillMaxWidth().height(1.dp)
+                            .background(androidx.compose.ui.graphics.Color(0xFFF0F1EE)),
                     )
                 }
             }

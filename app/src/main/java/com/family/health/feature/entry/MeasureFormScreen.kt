@@ -1,13 +1,17 @@
 // 契约：docs/05-页面结构与交互.md §8 记血压/血糖（大数字、时间默认现在、保存后自动返回）
 package com.family.health.feature.entry
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -15,7 +19,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,6 +54,7 @@ fun MeasureFormScreen(vm: AppViewModel, nav: NavHostController, type: String) {
     var ctx by remember { mutableStateOf(ui.lastGlucoseCtx) }
     var at by remember { mutableStateOf(nowStr()) }
     var note by remember { mutableStateOf("") }
+    var showPicker by remember { mutableStateOf(false) }
 
     fun save(again: Boolean) {
         val me = ui.devices.firstOrNull { it.self }?.displayName ?: "爸爸"
@@ -115,10 +124,40 @@ fun MeasureFormScreen(vm: AppViewModel, nav: NavHostController, type: String) {
             }
             Spacer(Modifier.height(14.dp))
         }
-        FhTextField(at, { at = it }, "测量时间")
+        Column {
+            Text("测量时间", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+                modifier = Modifier.padding(bottom = 6.dp))
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                    .background(androidx.compose.ui.graphics.Color.White)
+                    .clickable { showPicker = true }
+                    .padding(horizontal = 12.dp, vertical = 13.dp),
+            ) {
+                Text(at, fontSize = 14.sp, color = FhColors.Text)
+            }
+            Spacer(Modifier.height(14.dp))
+        }
         FhTextField(note, { note = it }, "备注")
         FhButton("保 存", onClick = { save(false) })
         FhButton("保存并再记一条", onClick = { save(true) }, ghost = true)
         Spacer(Modifier.height(20.dp))
+    }
+
+    if (showPicker) {
+        com.family.health.ui.components.FhDateTimePickerDialog(
+            initialDate = at.substring(0, 10),
+            initialTime = at.substring(11),
+            needDate = true,
+            needTime = true,
+            title = "测量时间",
+            onConfirm = { d, t ->
+                if (d != null && t != null) at = "$d $t"
+                showPicker = false
+            },
+            onDismiss = { showPicker = false },
+        )
     }
 }

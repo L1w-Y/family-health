@@ -147,6 +147,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         LaunchedEffect(Unit) { launcher.launch(android.Manifest.permission.POST_NOTIFICATIONS) }
     }
     LaunchedEffect(ui.reminders, ui.currentMemberId) { vm.rescheduleMeasureReminders() }
+    LaunchedEffect(ui.members) { vm.checkLowStockReminders() }
     var showPlus by rememberSaveable { mutableStateOf(false) }
     var showMemberSwitch by rememberSaveable { mutableStateOf(false) }
 
@@ -214,9 +215,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         SheetAction("💊 记用药变化", Modifier.weight(1f)) {
                             showPlus = false; nav.navigate(Routes.MED_CHANGE)
                         }
-                        SheetAction("🏥 记复查", Modifier.weight(1f)) {
-                            showPlus = false; nav.navigate(Routes.IMPORT)
-                        }
+                        SheetAction("🏥 记复查", Modifier.weight(1f), enabled = false) { }
                     }
                 }
             }
@@ -290,15 +289,18 @@ private fun SheetGroup(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun SheetAction(text: String, modifier: Modifier, onClick: () -> Unit) {
+private fun SheetAction(text: String, modifier: Modifier, enabled: Boolean = true, onClick: () -> Unit) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
             .background(FhColors.Bg)
-            .clickable(onClick = onClick)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(14.dp),
     ) {
-        Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text)
+        Text(
+            text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
+            color = if (enabled) FhColors.Text else FhColors.Tiny,
+        )
     }
 }
 
