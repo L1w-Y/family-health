@@ -45,7 +45,8 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     vm.checkTick.collectAsStateWithLifecycle() // 勾选变化驱动重组
     val member = ui.currentMember
-    val context = androidx.compose.ui.platform.LocalContext.current
+    var showDatePicker = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showTimePicker = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         // 下次复查气泡（置顶，无图标；点时间可改期）
@@ -72,18 +73,28 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
                     .clickable {
                         if (targetEvent == null) {
                             vm.toast("先录入一次复查")
-                            return@clickable
+                        } else {
+                            showDatePicker.value = true
                         }
-                        val base = next?.nextCheckupDate ?: todayStr()
-                        val parts = base.split("-").map { it.toInt() }
-                        android.app.DatePickerDialog(
-                            context, { _, y, m, d ->
-                                vm.setNextCheckup(targetEvent.id, "%04d-%02d-%02d".format(y, m + 1, d))
-                                vm.toast("已更新下次复查日期")
-                            }, parts[0], parts[1] - 1, parts[2],
-                        ).show()
                     }
                     .padding(horizontal = 8.dp, vertical = 2.dp),
+            )
+        }
+        if (showDatePicker.value && targetEvent != null) {
+            com.family.health.ui.components.FhDateTimePickerDialog(
+                initialDate = next?.nextCheckupDate ?: todayStr(),
+                initialTime = null,
+                needDate = true,
+                needTime = false,
+                title = "下次复查日期",
+                onConfirm = { date, _ ->
+                    if (date != null) {
+                        vm.setNextCheckup(targetEvent.id, date)
+                        vm.toast("已更新下次复查日期")
+                    }
+                    showDatePicker.value = false
+                },
+                onDismiss = { showDatePicker.value = false },
             )
         }
 
@@ -95,17 +106,16 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
             }
             member.notes.filter { !it.done }.take(5).forEach { n ->
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalAlignment = Alignment.Top,
                     modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
                 ) {
+                    if (n.remindAt != null) {
+                        Text("⏰", fontSize = 12.sp, modifier = Modifier.padding(end = 6.dp, top = 1.dp))
+                    }
                     Text(
-                        n.text, fontSize = 13.5.sp, color = FhColors.Text,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        n.text, fontSize = 13.5.sp, color = FhColors.Text, lineHeight = 20.sp,
                         modifier = Modifier.weight(1f),
                     )
-                    if (n.remindAt != null) {
-                        Text("⏰", fontSize = 12.sp, modifier = Modifier.padding(start = 6.dp))
-                    }
                 }
             }
         }
@@ -114,17 +124,25 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
         TodayMeasureGrid(
             recs = member.measurements.filter { it.date == todayStr() && !it.deleted },
             onCellClick = { type -> nav.navigate(Routes.measureForm(type)) },
-            onCellLongPress = {
-                val now = java.time.LocalTime.now()
-                android.app.TimePickerDialog(
-                    context, { _, h, mi ->
-                        val t = "%02d:%02d".format(h, mi)
-                        vm.addMeasureReminderTime(t)
-                        vm.toast("已添加每天 $t 提醒")
-                    }, now.hour, now.minute, true,
-                ).show()
-            },
+            onCellLongPress = { showTimePicker.value = true },
         )
+        if (showTimePicker.value) {
+            com.family.health.ui.components.FhDateTimePickerDialog(
+                initialDate = todayStr(),
+                initialTime = null,
+                needDate = false,
+                needTime = true,
+                title = "每天测量提醒",
+                onConfirm = { _, time ->
+                    if (time != null) {
+                        vm.addMeasureReminderTime(time)
+                        vm.toast("已添加每天 $time 提醒")
+                    }
+                    showTimePicker.value = false
+                },
+                onDismiss = { showTimePicker.value = false },
+            )
+        }
 
         // 今日用药卡（契约 §3：表格化，编辑在管理页）
         FhCard {
@@ -159,7 +177,16 @@ private fun TodayMeasureGrid(
 ) {
     FhCard {
         CardHead("今日测量")
-        listOf("bp" to "血压", "glucose" to "血糖").forEach { (type, label) ->
+        // 列头置顶：空腹 上午 下午 晚上
+        Row(modifier = Modifier.padding(start = 34.dp, bottom = 2.dp)) {
+            MEASURE_BUCKETS.forEach { b ->
+                Text(
+                    b, fontSize = 10.sp, color = FhColors.Tiny, textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
+                )
+            }
+        }
+        listOf("glucose" to "血糖", "bp" to "血压").forEach { (type, label) ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(vertical = 4.dp),
@@ -168,7 +195,7 @@ private fun TodayMeasureGrid(
                     label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
                     modifier = Modifier.width(34.dp),
                 )
-                MEASURE_BUCKETS.forEachIndexed { col, bucket ->
+                MEASURE_BUCKETS.forEachIndexed { col, _ ->
                     val x = recs.filter { it.type == type && bucketOf(it.time) == col }
                         .maxByOrNull { it.measuredAt }
                     Box(
@@ -195,16 +222,6 @@ private fun TodayMeasureGrid(
                         } else {
                             Text("—", fontSize = 12.sp, color = FhColors.Tiny)
                         }
-                    }
-                }
-            }
-            if (type == "bp") {
-                Row(modifier = Modifier.padding(start = 34.dp)) {
-                    MEASURE_BUCKETS.forEach { b ->
-                        Text(
-                            b, fontSize = 10.sp, color = FhColors.Tiny, textAlign = TextAlign.Center,
-                            modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
-                        )
                     }
                 }
             }

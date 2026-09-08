@@ -58,6 +58,7 @@ private data class NewMed(
     val end: String = "",
 )
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -66,6 +67,7 @@ fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
 
     var date by remember { mutableStateOf(todayStr()) }
     var reason by remember { mutableStateOf("") }
+    var showDatePicker by remember { mutableStateOf(false) }
     var linkedEventId by remember { mutableStateOf<String?>(null) }
     var stops by remember { mutableStateOf(setOf<String>()) }
     var adj by remember { mutableStateOf(mapOf<String, Pair<String, Set<String>>>()) }
@@ -75,14 +77,31 @@ fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
         PageTitle("记用药变化", onBack = { nav.popBackStack() })
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FhTextField(date, { date = it }, "生效日期", Modifier.weight(1f))
-            FhTextField(reason, { reason = it }, "事由（备注，自由填写）", Modifier.weight(1f), placeholder = "如：复查后调整、感冒")
+            Column(Modifier.weight(1f)) {
+                FieldLabel("生效日期")
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(androidx.compose.ui.graphics.Color.White)
+                        .clickable { showDatePicker = true }
+                        .padding(horizontal = 12.dp, vertical = 13.dp),
+                ) {
+                    Text(date, fontSize = 14.sp, color = FhColors.Text)
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                FhTextField(reason, { reason = it }, "备注")
+            }
         }
         FieldLabel("关联复查")
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             FChip("不关联", on = linkedEventId == null) { linkedEventId = null }
             member.events.forEach { e ->
-                FChip("${e.checkupDate} ${e.department}", on = linkedEventId == e.id) {
+                FChip(e.checkupDate, on = linkedEventId == e.id) {
                     linkedEventId = if (linkedEventId == e.id) null else e.id
                 }
             }
@@ -215,6 +234,21 @@ fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
             },
         )
         Spacer(Modifier.height(20.dp))
+    }
+
+    if (showDatePicker) {
+        com.family.health.ui.components.FhDateTimePickerDialog(
+            initialDate = date,
+            initialTime = null,
+            needDate = true,
+            needTime = false,
+            title = "生效日期",
+            onConfirm = { d, _ ->
+                if (d != null) date = d
+                showDatePicker = false
+            },
+            onDismiss = { showDatePicker = false },
+        )
     }
 }
 

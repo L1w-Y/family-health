@@ -79,7 +79,6 @@ import com.family.health.feature.records.EventDetailScreen
 import com.family.health.feature.records.IndicatorHistoryScreen
 import com.family.health.feature.records.RecordsScreen
 import com.family.health.feature.records.ReportDetailScreen
-import com.family.health.feature.trends.TrendsScreen
 import com.family.health.ui.components.Avatar
 import com.family.health.ui.theme.FhColors
 import kotlinx.coroutines.delay
@@ -89,7 +88,6 @@ object Routes {
     const val RECORDS = "records"
     const val MEDS = "meds"
     const val MINE = "mine"
-    const val TRENDS = "trends"
     const val NOTES = "notes"
     const val NOTE_FORM = "noteForm"
     const val EVENT = "event/{eventId}"
@@ -154,16 +152,13 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
 
     val backStack by nav.currentBackStackEntryAsState()
     val currentRoute = backStack?.destination?.route
-    val isHomeRoot = currentRoute == Routes.HOME
 
     Scaffold(
         containerColor = FhColors.Bg,
         topBar = {
             MemberBar(
                 name = ui.currentMember.name,
-                showTrendsEntry = isHomeRoot,
                 onSwitch = { showMemberSwitch = true },
-                onTrends = { nav.navigate(Routes.TRENDS) },
             )
         },
         bottomBar = {
@@ -307,38 +302,28 @@ private fun SheetAction(text: String, modifier: Modifier, onClick: () -> Unit) {
     }
 }
 
-/** 成员切换条（常驻顶部，契约 §1/§3） */
+/** 成员切换条（常驻顶部：居中气泡名，点击切换成员） */
 @Composable
 private fun MemberBar(
     name: String,
-    showTrendsEntry: Boolean,
     onSwitch: () -> Unit,
-    onTrends: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        horizontalArrangement = Arrangement.Center,
         modifier = Modifier
             .fillMaxWidth()
             .background(FhColors.Bg)
-            .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 10.dp),
+            .padding(top = 8.dp, bottom = 10.dp),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.clickable(onClick = onSwitch),
-        ) {
-            Avatar(name, 32)
-            Spacer(Modifier.width(9.dp))
-            Text(name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-            Spacer(Modifier.width(2.dp))
-            Text("▾", fontSize = 12.sp, color = FhColors.Text2)
-        }
-        if (showTrendsEntry) {
-            Text(
-                "趋势与对比 ›", fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                color = FhColors.Primary, modifier = Modifier.clickable(onClick = onTrends),
-            )
-        }
+        Text(
+            name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FhColors.Primary,
+            modifier = Modifier
+                .clip(RoundedCornerShape(99.dp))
+                .background(FhColors.PrimarySoft)
+                .clickable(onClick = onSwitch)
+                .padding(horizontal = 18.dp, vertical = 5.dp),
+        )
     }
 }
 
@@ -410,7 +395,6 @@ private fun AppNavHost(nav: NavHostController, vm: AppViewModel) {
         composable(Routes.RECORDS) { RecordsScreen(vm, nav) }
         composable(Routes.MEDS) { MedsScreen(vm, nav) }
         composable(Routes.MINE) { MineScreen(vm, nav) }
-        composable(Routes.TRENDS) { TrendsScreen(vm, nav) }
         composable(Routes.NOTES) { NotesScreen(vm, nav) }
         composable(Routes.NOTE_FORM) { NoteFormScreen(vm, nav) }
         composable(Routes.EVENT) { back ->

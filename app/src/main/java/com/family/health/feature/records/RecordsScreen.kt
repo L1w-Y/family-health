@@ -1,4 +1,4 @@
-// 契约：docs/05-页面结构与交互.md §4 Tab 2 记录（复查段/测量段、当日明细、编辑/软删）
+// 契约：docs/05-页面结构与交互.md §4 Tab 2 记录（复查段含重点指标表；测量段统计卡+当日明细）
 package com.family.health.feature.records
 
 import androidx.compose.foundation.clickable
@@ -25,15 +25,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.family.health.data.AppViewModel
-import com.family.health.data.MeasurePeriod
+import com.family.health.data.indicatorPoints
 import com.family.health.data.model.Labels
 import com.family.health.data.model.Measurement
 import com.family.health.ui.Routes
+import com.family.health.ui.components.CardHead
 import com.family.health.ui.components.EmptyHint
 import com.family.health.ui.components.FChip
 import com.family.health.ui.components.FhCard
@@ -45,18 +47,16 @@ import com.family.health.ui.components.SegControl
 import com.family.health.ui.theme.FhColors
 import com.family.health.util.daysTo
 import com.family.health.util.mmdd
-import com.family.health.util.monthLabel
-import com.family.health.util.shiftMonth
-import com.family.health.util.todayStr
 import com.family.health.util.weekdayCn
+import kotlin.math.roundToInt
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val member = ui.currentMember
     var dayDetail by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Measurement?>(null) }
+    var showAddWatch by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         SegControl(listOf("复查", "测量"), if (ui.recordsSeg == "checkup") 0 else 1) {
@@ -64,7 +64,49 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
         }
 
         if (ui.recordsSeg == "checkup") {
-            // 复查段：事件倒序列表（契约 §4.1）
+            // 重点指标对比（紧凑表格：行=清单项，列=最近 5 次复查）
+            CardHead("重点指标对比", "＋ 添加 ›") { showAddWatch = true }
+            val eventsDesc = member.events.sortedByDescending { it.checkupDate }.take(5)
+            FhCard(contentPadding = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+                if (member.watchlist.isEmpty()) {
+                    EmptyHint("重点清单为空，点右上角\"＋ 添加\"")
+                } else {
+                    Row {
+                        Spacer(Modifier.width(92.dp))
+                        eventsDesc.forEach { e ->
+                            Text(
+                                mmdd(e.checkupDate), fontSize = 11.sp, color = FhColors.Text2,
+                                fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                                modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                            )
+                        }
+                    }
+                    member.watchlist.forEach { w ->
+                        val (pts, _) = indicatorPoints(member, w.canonicalName)
+                        val byDate = pts.associateBy { it.date }
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.clickable { nav.navigate(Routes.indicator(w.canonicalName)) },
+                        ) {
+                            Text(
+                                w.canonicalName, fontSize = 12.sp, color = FhColors.Text,
+                                modifier = Modifier.width(92.dp).padding(vertical = 6.dp),
+                                maxLines = 2, lineHeight = 15.sp,
+                            )
+                            eventsDesc.forEach { e ->
+                                Text(
+                                    byDate[e.checkupDate]?.displayValue ?: "—",
+                                    fontSize = 12.sp, color = FhColors.Text, textAlign = TextAlign.Center,
+                                    modifier = Modifier.weight(1f).padding(vertical = 6.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 复查事件列表（契约 §4.1：日期+科室，摘要从简）
+            CardHead("复查记录")
             if (member.events.isEmpty()) {
                 EmptyHint("还没有复查记录\n从最近一次复查报告开始，历史可以慢慢补")
             }
@@ -74,105 +116,28 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
                         Text(e.checkupDate, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
                         Text(e.department, fontSize = 12.sp, color = FhColors.Text2)
                     }
-                    RowLine2(
-                        buildString {
-                            append("${e.hospital} · ${e.reports.size} 份报告")
-                            if (e.medChangeSummary.isNotEmpty()) append(" · 用药变化")
-                            e.nextCheckupDate?.let { append(" · 下次 ${mmdd(it)}") }
-                        }
-                    )
                     if (e.note.isNotEmpty()) {
                         RowLine2(e.note, color = androidx.compose.ui.graphics.Color(0xFF8A9089))
                     }
                 }
             }
         } else {
-            // 测量段（契约 §4.2）
+            // 测量段：类型 + 周期 chips，统计卡（最新值/均值/按日行，点行看明细）
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
                 FChip("血压", on = ui.measureType == "bp") { vm.setMeasureType("bp") }
                 FChip("血糖", on = ui.measureType == "glucose") { vm.setMeasureType("glucose") }
-            }
-            PeriodNav(vm, ui.measurePeriod)
-
-            val list = member.measurements.filter { m ->
-                m.type == ui.measureType && !m.deleted && when (val p = ui.measurePeriod) {
-                    is MeasurePeriod.Month -> m.date.startsWith(p.month)
-                    is MeasurePeriod.LastDays -> daysTo(m.date) >= -p.days
+                Spacer(Modifier.weight(1f))
+                listOf(3, 7, 30).forEach { d ->
+                    FChip("${d}天", on = ui.trendDays == d) { vm.setTrendDays(d) }
                 }
             }
-            val byDay = list.groupBy { it.date }.toSortedMap(compareByDescending { it })
-
-            if (byDay.isEmpty()) {
+            val recs = member.measurements.filter {
+                it.type == ui.measureType && !it.deleted && daysTo(it.date) >= -ui.trendDays
+            }
+            if (recs.isEmpty()) {
                 EmptyHint("该周期内暂无记录，点底部 ＋ 记一条")
-            } else if (ui.measureType == "bp") {
-                // 血压：日志表式，一行=一天（契约 §4.2）
-                byDay.forEach { (day, recs) ->
-                    RowCard(onClick = { dayDetail = day }) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.width(54.dp)) {
-                                Text(mmdd(day), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-                                Text(weekdayCn(day), fontSize = 11.sp, color = FhColors.Text2)
-                            }
-                            Spacer(Modifier.width(14.dp))
-                            // 当日条数超过一行宽度自动折行，不截断、不省略（契约 §4.2）
-                            androidx.compose.foundation.layout.FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                recs.sortedBy { it.measuredAt }.forEach { x ->
-                                    Column {
-                                        Row(verticalAlignment = Alignment.Bottom) {
-                                            Text("${x.systolic}/${x.diastolic}", fontSize = 15.sp,
-                                                fontWeight = FontWeight.Bold, color = FhColors.Text)
-                                            x.heartRateBpm?.let {
-                                                Text(" ·$it", fontSize = 12.sp, color = FhColors.Text2)
-                                            }
-                                        }
-                                        Text(x.time, fontSize = 10.sp, color = FhColors.Tiny)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             } else {
-                // 血糖：场景网格（契约 §4.2）
-                FhCard(contentPadding = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)) {
-                    Row {
-                        Text("日期", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
-                            modifier = Modifier.weight(1.1f).padding(vertical = 6.dp))
-                        Labels.GLUCOSE_SCENES.forEach { (_, label) ->
-                            Text(label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
-                                modifier = Modifier.weight(1f).padding(vertical = 6.dp),
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-                        }
-                    }
-                    byDay.forEach { (day, recs) ->
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { dayDetail = day }
-                                .padding(vertical = 7.dp),
-                        ) {
-                            Text(mmdd(day), fontSize = 13.5.sp, color = FhColors.Text, modifier = Modifier.weight(1.1f))
-                            Labels.GLUCOSE_SCENES.forEach { (key, _) ->
-                                val cells = recs.filter { it.glucoseContext == key }.sortedBy { it.measuredAt }
-                                Column(
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                    modifier = Modifier.weight(1f),
-                                ) {
-                                    if (cells.isEmpty()) {
-                                        Text("·", fontSize = 13.5.sp, color = FhColors.Text2)
-                                    }
-                                    cells.forEach { c ->
-                                        Text("${c.glucoseMmol}", fontSize = 13.5.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-                                        Text(c.time, fontSize = 10.sp, color = FhColors.Tiny)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+                MeasureStatCard(recs, ui.measureType, ui.trendDays) { dayDetail = it }
             }
         }
         Spacer(Modifier.height(8.dp))
@@ -206,35 +171,128 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
             onDismiss = { editing = null },
         )
     }
+
+    if (showAddWatch) {
+        AddWatchSheet(vm, onDone = { showAddWatch = false })
+    }
 }
 
-/** 周期选择：自然月翻页 + 快捷周期（契约 §4.2） */
+/** 测量统计卡：最新值 + 均值/最高/最低 + 按日数值行（点行看当日明细） */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
-private fun PeriodNav(vm: AppViewModel, period: MeasurePeriod) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(bottom = 10.dp),
-    ) {
-        when (period) {
-            is MeasurePeriod.Month -> {
-                Text("‹", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = FhColors.Primary,
-                    modifier = Modifier
-                        .clickable { vm.setMeasurePeriod(MeasurePeriod.Month(shiftMonth(period.month, -1))) }
-                        .padding(horizontal = 10.dp))
-                Text(monthLabel(period.month), fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-                Text("›", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = FhColors.Primary,
-                    modifier = Modifier
-                        .clickable { vm.setMeasurePeriod(MeasurePeriod.Month(shiftMonth(period.month, 1))) }
-                        .padding(horizontal = 10.dp))
-                Spacer(Modifier.weight(1f))
-                FChip("近7天") { vm.setMeasurePeriod(MeasurePeriod.LastDays(7)) }
-                Spacer(Modifier.width(8.dp))
-                FChip("近30天") { vm.setMeasurePeriod(MeasurePeriod.LastDays(30)) }
+private fun MeasureStatCard(
+    recs: List<Measurement>, type: String, days: Int,
+    onDayClick: (String) -> Unit,
+) {
+    val sorted = recs.sortedBy { it.measuredAt }
+    FhCard(contentPadding = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
+        val last = sorted.last()
+        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(vertical = 2.dp)) {
+            Text(
+                if (type == "bp") "${last.systolic}/${last.diastolic}" else "${last.glucoseMmol}",
+                fontSize = 19.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+            )
+            Text(mmdd(last.date), fontSize = 11.sp, color = FhColors.Text2,
+                modifier = Modifier.padding(start = 8.dp))
+            Spacer(Modifier.weight(1f))
+            Text("${sorted.size} 条 · 近${days}天", fontSize = 11.sp, color = FhColors.Text2)
+        }
+        val stat = if (type == "bp") {
+            val sys = sorted.mapNotNull { it.systolic }
+            val dia = sorted.mapNotNull { it.diastolic }
+            "均值 ${sys.average().roundToInt()}/${dia.average().roundToInt()}" +
+                " · 最高 ${sys.maxOrNull()}/${dia.maxOrNull()}" +
+                " · 最低 ${sys.minOrNull()}/${dia.minOrNull()}"
+        } else {
+            val v = sorted.mapNotNull { it.glucoseMmol }
+            "均值 ${"%.1f".format(v.average())} · 最高 ${v.maxOrNull()} · 最低 ${v.minOrNull()}"
+        }
+        Text(stat, fontSize = 11.sp, color = FhColors.Text2,
+            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
+        sorted.groupBy { it.date }.toSortedMap(compareByDescending { it }).forEach { (day, dayRecs) ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onDayClick(day) }
+                    .padding(vertical = 4.dp),
+            ) {
+                Column(modifier = Modifier.width(44.dp)) {
+                    Text(mmdd(day), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2)
+                    Text(weekdayCn(day), fontSize = 9.sp, color = FhColors.Tiny)
+                }
+                androidx.compose.foundation.layout.FlowRow {
+                    dayRecs.sortedBy { it.measuredAt }.forEach { x ->
+                        Text(
+                            if (type == "bp") {
+                                buildString {
+                                    append("${x.systolic}/${x.diastolic}")
+                                    x.heartRateBpm?.let { append("·$it") }
+                                    append(" ${x.time}")
+                                }
+                            } else {
+                                "${x.glucoseMmol} ${Labels.sceneName(x.glucoseContext)} ${x.time}"
+                            },
+                            fontSize = 12.sp, color = FhColors.Text,
+                            modifier = Modifier.padding(end = 12.dp),
+                        )
+                    }
+                }
             }
-            is MeasurePeriod.LastDays -> {
-                Text("近 ${period.days} 天", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-                Spacer(Modifier.weight(1f))
-                FChip("回到本月") { vm.setMeasurePeriod(MeasurePeriod.Month(todayStr().substring(0, 7))) }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddWatchSheet(vm: AppViewModel, onDone: () -> Unit) {
+    val ui by vm.ui.collectAsStateWithLifecycle()
+    val member = ui.currentMember
+    var manual by remember { mutableStateOf("") }
+    val candidates = member.events
+        .flatMap { it.reports }
+        .flatMap { it.indicators }
+        .map { it.itemName }
+        .distinct()
+        .filter { name -> member.watchlist.none { w -> name == w.canonicalName || name in w.aliases } }
+    ModalBottomSheet(onDismissRequest = onDone) {
+        Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 26.dp)) {
+            Text("加入重点清单", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text2,
+                modifier = Modifier.padding(bottom = 10.dp))
+            FhTextField(manual, { manual = it }, "手输指标名（可填别名合并历史）")
+            if (manual.isNotBlank()) {
+                Text(
+                    "＋ 加入\"$manual\"",
+                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
+                    modifier = Modifier
+                        .clickable {
+                            vm.addWatch(manual.trim())
+                            vm.toast("已加入重点清单")
+                            onDone()
+                        }
+                        .padding(vertical = 10.dp),
+                )
+            }
+            Text("从报告指标中选择", fontSize = 12.sp, color = FhColors.Text2,
+                modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
+            if (candidates.isEmpty()) {
+                Text("暂无可选指标", fontSize = 13.sp, color = FhColors.Text2,
+                    modifier = Modifier.padding(vertical = 8.dp))
+            }
+            Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
+                candidates.forEach { name ->
+                    Text(
+                        name, fontSize = 14.sp, color = FhColors.Text,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                vm.addWatch(name)
+                                vm.toast("已加入重点清单")
+                                onDone()
+                            }
+                            .padding(vertical = 11.dp),
+                    )
+                }
             }
         }
     }
@@ -259,9 +317,7 @@ private fun DayDetailSheet(
             recs.forEach { x ->
                 RowCard {
                     RowLine1 {
-                        Text(
-                            measurementSummary(x), fontSize = 14.sp, color = FhColors.Text,
-                        )
+                        Text(measurementSummary(x), fontSize = 14.sp, color = FhColors.Text)
                         Text(x.time, fontSize = 12.sp, color = FhColors.Text2)
                     }
                     Row(

@@ -40,8 +40,8 @@ fun SetupScreen(vm: AppViewModel) {
             fontSize = 13.sp, color = FhColors.Text2, lineHeight = 20.sp,
             modifier = Modifier.padding(bottom = 14.dp),
         )
-        FhTextField(secret, { secret = it.trim() }, "家庭口令", placeholder = "家人约定的口令")
-        FhTextField(name, { name = it.trim() }, "这台设备的署名（如：小枫的手机）")
+        FhTextField(secret, { secret = it.trim() }, "家庭口令")
+        FhTextField(name, { name = it.trim() }, "这台设备的署名")
         st.error?.let {
             Text(it, fontSize = 13.sp, color = FhColors.Amber, lineHeight = 19.sp,
                 modifier = Modifier.padding(bottom = 10.dp))

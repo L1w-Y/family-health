@@ -107,6 +107,7 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
     var time by remember { mutableStateOf<String?>(null) }
     var repeatDaily by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf<String?>(null) }
+    var showPicker by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("新建便签", onBack = { nav.popBackStack() })
@@ -115,21 +116,9 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
         Text("提醒时刻", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
             modifier = Modifier.padding(bottom = 6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            FChip(date ?: "选日期") {
-                val now = java.time.LocalDate.now()
-                android.app.DatePickerDialog(
-                    context, { _, y, m, d -> date = "%04d-%02d-%02d".format(y, m + 1, d) },
-                    now.year, now.monthValue - 1, now.dayOfMonth,
-                ).show()
-            }
-            Spacer(Modifier.width(8.dp))
-            FChip(time ?: "选时间") {
-                val now = java.time.LocalTime.now()
-                android.app.TimePickerDialog(
-                    context, { _, h, mi -> time = "%02d:%02d".format(h, mi) },
-                    now.hour, now.minute, true,
-                ).show()
-            }
+            FChip(
+                if (date != null && time != null) "$date $time" else "选择日期时间",
+            ) { showPicker = true }
             if (date != null || time != null) {
                 Spacer(Modifier.width(8.dp))
                 FChip("清除") { date = null; time = null }
@@ -168,5 +157,20 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
             nav.popBackStack()
         })
         Spacer(Modifier.height(20.dp))
+    }
+
+    if (showPicker) {
+        com.family.health.ui.components.FhDateTimePickerDialog(
+            initialDate = date ?: java.time.LocalDate.now().toString(),
+            initialTime = time,
+            needDate = true,
+            needTime = true,
+            title = "提醒时刻",
+            onConfirm = { d, t ->
+                date = d; time = t
+                showPicker = false
+            },
+            onDismiss = { showPicker = false },
+        )
     }
 }
