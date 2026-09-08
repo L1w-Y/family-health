@@ -37,7 +37,7 @@ fun AccountScreen(vm: AppViewModel, nav: NavHostController) {
     var familyName by remember(ui.familyName) { mutableStateOf(ui.familyName) }
     val session = remember { vm.sessionInfo() }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("服务器与账号", onBack = { nav.popBackStack() })
         PageSub("连接与同步状态")
 

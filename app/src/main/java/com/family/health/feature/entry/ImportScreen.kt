@@ -86,8 +86,8 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController) {
         }
     }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
-        PageTitle("记复查（导入）", onBack = { nav.popBackStack() })
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
+        PageTitle("记复查", onBack = { nav.popBackStack() })
         StepsBar(total = 4, active = step)
 
         when (step) {

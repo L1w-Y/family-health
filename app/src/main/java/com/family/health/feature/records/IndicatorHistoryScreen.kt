@@ -34,7 +34,7 @@ fun IndicatorHistoryScreen(vm: AppViewModel, nav: NavHostController, name: Strin
     val member = ui.currentMember
     val (pts, wl) = indicatorPoints(member, name)
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle(name, onBack = { nav.popBackStack() })
         PageSub(
             "共 ${pts.size} 次记录" + (

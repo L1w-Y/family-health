@@ -39,7 +39,7 @@ fun ReportDetailScreen(vm: AppViewModel, nav: NavHostController, eventId: String
     val event = ui.currentMember.events.firstOrNull { it.id == eventId }
     val report = event?.reports?.getOrNull(index)
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         if (event == null || report == null) {
             PageTitle("报告", onBack = { nav.popBackStack() })
             EmptyHint("报告不存在")

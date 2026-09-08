@@ -455,6 +455,18 @@ class Repository(
         engine.kickPush()
     }
 
+    /** 修改复查事件的下次复查日期（02 §4.3：checkup_events 可改，整行 LWW） */
+    suspend fun updateNextCheckupDate(eventId: String, nextDate: String) {
+        val old = db.checkupEventDao().byId(eventId) ?: return
+        val e = old.copy(nextCheckupDate = nextDate)
+        val key = uuid()
+        db.withTransaction {
+            db.checkupEventDao().upsertAll(listOf(e))
+            db.outboxDao().insertAll(outboxOps(key, listOf(Triple("checkup_events", "update", checkupEventToRow(e)))))
+        }
+        engine.kickPush()
+    }
+
     // ================= 复查导入（03；dry_run 预检 → 正式导入 → 增量下拉） =================
 
     private fun idemKeyOf(text: String): String = runCatching {

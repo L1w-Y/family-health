@@ -42,7 +42,7 @@ fun MedEditScreen(vm: AppViewModel, nav: NavHostController, medId: String) {
     var start by remember { mutableStateOf(med.startDate) }
     var end by remember { mutableStateOf(med.endDate ?: "") }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("编辑用药", onBack = { nav.popBackStack() })
         FhTextField(name, { name = it }, "名称")
         FhTextField(dosage, { dosage = it }, "用法用量")

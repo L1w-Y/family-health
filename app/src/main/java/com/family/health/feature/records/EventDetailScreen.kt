@@ -33,7 +33,7 @@ fun EventDetailScreen(vm: AppViewModel, nav: NavHostController, eventId: String)
     val ui by vm.ui.collectAsStateWithLifecycle()
     val event = ui.currentMember.events.firstOrNull { it.id == eventId }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         if (event == null) {
             PageTitle("复查", onBack = { nav.popBackStack() })
             EmptyHint("事件不存在")

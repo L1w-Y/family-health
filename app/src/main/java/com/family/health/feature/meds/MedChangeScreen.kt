@@ -71,7 +71,7 @@ fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
     var adj by remember { mutableStateOf(mapOf<String, Pair<String, Set<String>>>()) }
     val news = remember { mutableListOf<NewMed>().toMutableStateList() }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("记用药变化", onBack = { nav.popBackStack() })
 
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -100,7 +100,7 @@ fun MedChangeScreen(vm: AppViewModel, nav: NavHostController) {
         active.forEach { med ->
             val stopped = med.id in stops
             val adjusting = adj.containsKey(med.id)
-            FhCard(contentPadding = Modifier.padding(horizontal = 14.dp, vertical = 11.dp)) {
+            FhCard(contentPadding = Modifier.padding(horizontal = 10.dp, vertical = 11.dp)) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = if (stopped) Modifier else Modifier,
@@ -228,6 +228,6 @@ private fun OpChip(text: String, on: Boolean, onClick: () -> Unit) {
             .clip(RoundedCornerShape(99.dp))
             .background(if (on) FhColors.OpDark else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 4.dp),
+            .padding(horizontal = 10.dp, vertical = 4.dp),
     )
 }

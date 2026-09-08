@@ -51,7 +51,7 @@ import com.family.health.ui.theme.FhColors
 @Composable
 fun MineScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         FhCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar("家", 44)
@@ -92,7 +92,7 @@ fun MineScreen(vm: AppViewModel, nav: NavHostController) {
 @Composable
 fun MembersScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("成员档案", onBack = { nav.popBackStack() }) {
             Text(
                 "＋ 添加", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
@@ -121,7 +121,7 @@ fun MemberEditScreen(vm: AppViewModel, nav: NavHostController, memberId: String?
     var birth by remember { mutableStateOf(existing?.birthDate ?: "") }
     var note by remember { mutableStateOf(existing?.profileNote ?: "") }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle(if (memberId != null) "编辑档案" else "添加成员", onBack = { nav.popBackStack() })
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FhTextField(name, { name = it }, "姓名/称呼", Modifier.weight(1f))
@@ -149,7 +149,7 @@ fun MemberEditScreen(vm: AppViewModel, nav: NavHostController, memberId: String?
 @Composable
 fun DevicesScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("家庭口令与设备", onBack = { nav.popBackStack() })
         FhCard {
             CardHead("家庭口令", "更换 ›") { vm.toast("更换后所有设备需重新输入") }
@@ -192,7 +192,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
     val member = ui.currentMember
     val r = ui.reminders[member.id] ?: com.family.health.data.model.ReminderSetting()
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("提醒设置", onBack = { nav.popBackStack() })
         PageSub("当前成员：${member.name}")
 
@@ -258,7 +258,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
 fun TokenScreen(vm: AppViewModel, nav: NavHostController) {
     val session = remember { vm.sessionInfo() }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("API 令牌", onBack = { nav.popBackStack() })
         PageSub("本机设备令牌即 HTTP 导入凭证（Authorization: Bearer <令牌>），与 App 粘贴导入同一格式")
         FhCard {
@@ -285,7 +285,7 @@ fun TokenScreen(vm: AppViewModel, nav: NavHostController) {
 @Composable
 fun ExportScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("数据导出", onBack = { nav.popBackStack() })
         ui.members.forEach { m ->
             RowCard {
@@ -308,7 +308,7 @@ fun ExportScreen(vm: AppViewModel, nav: NavHostController) {
 
 @Composable
 fun AboutScreen(vm: AppViewModel, nav: NavHostController) {
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("关于与隐私", onBack = { nav.popBackStack() })
         FhCard {
             Text(

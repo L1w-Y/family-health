@@ -33,6 +33,7 @@ interface MeasurementDao {
 interface CheckupEventDao {
     @Upsert suspend fun upsertAll(items: List<CheckupEventEntity>)
     @Query("SELECT * FROM checkup_events WHERE deleted = 0") fun observeAll(): Flow<List<CheckupEventEntity>>
+    @Query("SELECT * FROM checkup_events WHERE id = :id") suspend fun byId(id: String): CheckupEventEntity?
 }
 
 @Dao

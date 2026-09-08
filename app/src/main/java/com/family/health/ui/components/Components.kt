@@ -35,7 +35,7 @@ val NumStyle = TextStyle(fontFeatureSettings = "tnum")
 fun FhCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    contentPadding: Modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+    contentPadding: Modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val shape = RoundedCornerShape(14.dp)
@@ -45,7 +45,7 @@ fun FhCard(
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 12.dp)
+            .padding(bottom = 8.dp)
             .then(if (onClick != null) Modifier.clip(shape).clickable(onClick = onClick) else Modifier),
     ) {
         Column(modifier = contentPadding, content = content)
@@ -279,7 +279,7 @@ fun PageTitle(title: String, onBack: (() -> Unit)? = null, actions: @Composable 
                 modifier = Modifier.clickable(onClick = onBack).padding(end = 8.dp),
             )
         }
-        Text(title, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+        Text(title, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
         Spacer(Modifier.weight(1f))
         actions()
     }

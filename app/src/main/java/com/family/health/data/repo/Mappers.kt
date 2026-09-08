@@ -167,6 +167,13 @@ fun medicationItemToRow(e: MedicationItemEntity): JsonObject = kotlinx.serializa
     putIfNotNull(this, "change_id", e.changeId)
 }
 
+fun checkupEventToRow(e: CheckupEventEntity): JsonObject = kotlinx.serialization.json.buildJsonObject {
+    put("id", e.id); put("profile_id", e.profileId); put("checkup_date", e.checkupDate)
+    putIfNotNull(this, "hospital", e.hospital); putIfNotNull(this, "department", e.department)
+    putIfNotNull(this, "note", e.note); putIfNotNull(this, "next_checkup_date", e.nextCheckupDate)
+    putIfNotNull(this, "medication_changes_note", e.medicationChangesNote)
+}
+
 fun medChangeToRow(e: MedChangeEntity): JsonObject = kotlinx.serialization.json.buildJsonObject {
     put("id", e.id); put("profile_id", e.profileId); put("effective_date", e.effectiveDate)
     putIfNotNull(this, "note", e.note); putIfNotNull(this, "linked_event_id", e.linkedEventId)

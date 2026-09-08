@@ -30,7 +30,7 @@ fun MedHistoryScreen(vm: AppViewModel, nav: NavHostController) {
     val member = ui.currentMember
     val segs = medHistory(member.meds)
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("历史用药", onBack = { nav.popBackStack() })
         PageSub("按变化节点分段 · 每个阶段在用什么药")
         if (segs.isEmpty()) {

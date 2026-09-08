@@ -24,21 +24,22 @@ import com.family.health.ui.components.FhTextField
 import com.family.health.ui.components.PageTitle
 import com.family.health.ui.theme.FhColors
 
+/** 家庭服务器地址（固定，全家统一） */
+private const val SERVER_URL = "http://43.161.199.183"
+
 @Composable
 fun SetupScreen(vm: AppViewModel) {
     val st by vm.setup.collectAsStateWithLifecycle()
-    var server by remember { mutableStateOf("") }
     var secret by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("连接家庭服务器")
         Text(
-            "首次使用需要连接你家的服务器。同一家庭的所有设备使用同一个家庭口令。",
+            "同一家庭的所有设备使用同一个家庭口令。",
             fontSize = 13.sp, color = FhColors.Text2, lineHeight = 20.sp,
             modifier = Modifier.padding(bottom = 14.dp),
         )
-        FhTextField(server, { server = it.trim() }, "服务器地址", placeholder = "http://43.161.199.183")
         FhTextField(secret, { secret = it.trim() }, "家庭口令", placeholder = "家人约定的口令")
         FhTextField(name, { name = it.trim() }, "这台设备的署名（如：小枫的手机）")
         st.error?.let {
@@ -46,7 +47,7 @@ fun SetupScreen(vm: AppViewModel) {
                 modifier = Modifier.padding(bottom = 10.dp))
         }
         FhButton(if (st.loading) "连接并同步中…" else "连 接", onClick = {
-            if (!st.loading) vm.setup(server, secret, name)
+            if (!st.loading) vm.setup(SERVER_URL, secret, name)
         })
         Spacer(Modifier.height(20.dp))
     }

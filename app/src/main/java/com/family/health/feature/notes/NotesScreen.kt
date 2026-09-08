@@ -42,7 +42,7 @@ fun NotesScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val member = ui.currentMember
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("便签", onBack = { nav.popBackStack() }) {
             Text(
                 "＋ 新建", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
@@ -108,7 +108,7 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
     var repeatDaily by remember { mutableStateOf(false) }
     var target by remember { mutableStateOf<String?>(null) }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("新建便签", onBack = { nav.popBackStack() })
         FhTextField(text, { text = it }, "内容", multiline = true, placeholder = "如：下周三上午去取药")
 

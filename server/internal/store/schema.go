@@ -37,7 +37,8 @@ var tables = map[string]tableMeta{
 		jsonbCol: map[string]bool{"payload": true},
 	},
 	"checkup_events": {
-		kind: KindAppendOnly,
+		// 可改表：复查日期/备注/下次复查日期存在真实修改需求（如医生改期），整行 LWW（02 §4.3）
+		kind: KindMutable,
 		bizCols: []string{"profile_id", "checkup_date", "hospital", "department", "note",
 			"next_checkup_date", "medication_changes_note"},
 	},

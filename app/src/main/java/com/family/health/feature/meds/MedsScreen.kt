@@ -36,7 +36,7 @@ fun MedsScreen(vm: AppViewModel, nav: NavHostController) {
     val current = member.meds.filter { it.category == "long_term" && it.endDate == null }
     val temp = member.meds.filter { it.category == "temporary" && it.endDate == null }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         Row(
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier.padding(start = 2.dp, end = 2.dp, bottom = 8.dp),

@@ -88,7 +88,7 @@ fun MeasureFormScreen(vm: AppViewModel, nav: NavHostController, type: String) {
         }
     }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle(title, onBack = { nav.popBackStack() })
         PageSub(ui.currentMember.name)
 

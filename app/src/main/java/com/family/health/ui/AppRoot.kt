@@ -219,7 +219,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                         SheetAction("💊 记用药变化", Modifier.weight(1f)) {
                             showPlus = false; nav.navigate(Routes.MED_CHANGE)
                         }
-                        SheetAction("🏥 记复查（导入）", Modifier.weight(1f)) {
+                        SheetAction("🏥 记复查", Modifier.weight(1f)) {
                             showPlus = false; nav.navigate(Routes.IMPORT)
                         }
                     }

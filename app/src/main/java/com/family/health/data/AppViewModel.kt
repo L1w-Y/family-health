@@ -291,6 +291,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     // ---------- 同步 ----------
     fun syncNow() = engine.kickPull()
 
+    /** 概览气泡点击设置下次复查日期 */
+    fun setNextCheckup(eventId: String, date: String) = launch { repo.updateNextCheckupDate(eventId, date) }
+
     // ---------- 复查导入（03：dry_run 预检 → 正式导入） ----------
     fun importDryRun(text: String, onResult: (Result<ImportResult>) -> Unit) = launch {
         onResult(runCatching { repo.importDryRun(text) })

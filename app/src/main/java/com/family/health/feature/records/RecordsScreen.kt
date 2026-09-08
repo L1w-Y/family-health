@@ -58,7 +58,7 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
     var dayDetail by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Measurement?>(null) }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         SegControl(listOf("复查", "测量"), if (ui.recordsSeg == "checkup") 0 else 1) {
             vm.setRecordsSeg(if (it == 0) "checkup" else "measure")
         }

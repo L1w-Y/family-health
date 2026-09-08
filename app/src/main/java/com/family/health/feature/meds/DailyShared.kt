@@ -36,13 +36,12 @@ import com.family.health.ui.components.FhButton
 import com.family.health.ui.components.FhTextField
 import com.family.health.ui.theme.FhColors
 
-/** 今日用药卡内容（概览页复用）：时段分区 + 每味药勾选（本机按日清零，不写库） */
+/** 今日用药卡内容（概览页复用）：表格化（药品/用量/剩余/预计），中药独立置顶；勾选本机按日清零 */
 @Composable
 fun DailyMedList(
     items: List<DailyMedItem>,
     checks: Set<String>,
     onToggleCheck: (String) -> Unit,
-    onItemClick: (DailyMedItem) -> Unit,
 ) {
     if (items.isEmpty()) {
         Text(
@@ -53,34 +52,77 @@ fun DailyMedList(
     }
     val west = items.filter { !it.isTcm }
     val tcm = items.filter { it.isTcm }
+
+    // 表头
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 2.dp)) {
+        Spacer(Modifier.width(38.dp))
+        Text("药品", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
+            modifier = Modifier.weight(1.35f))
+        Text("用量", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
+            modifier = Modifier.weight(1f))
+        Text("剩余", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
+            modifier = Modifier.weight(0.95f))
+        Text("预计", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
+            modifier = Modifier.weight(0.7f))
+    }
+
+    // 中药独立区块置顶
+    if (tcm.isNotEmpty()) {
+        SlotHeader("中药", true)
+        tcm.forEach { x ->
+            val leftDays = ((x.tcmPacks ?: 0.0) * x.tcmDaysPerPack - x.tcmUsedDays).toInt()
+            MedTableRow(
+                checked = x.id in checks,
+                name = x.name, dose = "每副 ${x.tcmDaysPerPack} 天",
+                stock = "${x.tcmPacks?.toInt() ?: 0} 副",
+                days = "${maxOf(leftDays, 0)}天",
+                onToggle = { onToggleCheck(x.id) },
+            )
+        }
+    }
+
     Labels.SLOTS.forEach { (key, label) ->
         val inSlot = west.filter { key in it.doseSlots }
         if (inSlot.isNotEmpty()) {
             SlotHeader(label, false)
             inSlot.forEach { x ->
-                DailyCheckRow(
+                MedTableRow(
                     checked = x.id in checks,
                     name = x.name, dose = x.doseText,
-                    stock = x.stockQty?.let { s ->
-                        "剩${s.toInt()}${x.stockUnit}" + (x.daysLeft?.let { " · 约${it}天" } ?: "")
-                    } ?: "余量未记",
+                    stock = x.stockQty?.let { s -> "${s.toInt()}${x.stockUnit}" } ?: "—",
+                    days = x.daysLeft?.let { "${it}天" } ?: "—",
                     onToggle = { onToggleCheck(x.id) },
-                    onClick = { onItemClick(x) },
                 )
             }
         }
     }
-    if (tcm.isNotEmpty()) {
-        SlotHeader("中药", true)
-        tcm.forEach { x ->
-            DailyCheckRow(
-                checked = x.id in checks,
-                name = x.name, dose = "剩 ${x.tcmPacks?.toInt() ?: 0} 副",
-                stock = "这副第 ${x.tcmUsedDays} 天 / 共 ${x.tcmDaysPerPack} 天",
-                onToggle = { onToggleCheck(x.id) },
-                onClick = { onItemClick(x) },
-            )
-        }
+}
+
+@Composable
+private fun MedTableRow(
+    checked: Boolean, name: String, dose: String, stock: String, days: String,
+    onToggle: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+    ) {
+        androidx.compose.material3.Checkbox(
+            checked = checked,
+            onCheckedChange = { onToggle() },
+            colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = FhColors.Primary),
+            modifier = Modifier.width(34.dp),
+        )
+        Text(
+            name, fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            color = if (checked) FhColors.Text2 else FhColors.Text,
+            textDecoration = if (checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+            modifier = Modifier.weight(1.35f).padding(start = 4.dp),
+            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+        )
+        Text(dose, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(1f))
+        Text(stock, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(0.95f))
+        Text(days, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(0.7f))
     }
 }
 

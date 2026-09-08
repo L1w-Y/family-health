@@ -63,7 +63,8 @@ scripts/     schema.sql 建表脚本、smoke.ps1 端到端验证、fixtures/ 测
 
 1. **可改表集合**：02 §4.3 明示 profiles/medication_items/reminders/watch_items；
    实现另含 `notes`（done 勾选）与 `daily_med_items`（余量手填），二者业务上必然可改，
-   语义与 §4.3 整行 LWW 一致。`med_changes` 也允许 update（批次备注修正）。
+   语义与 §4.3 整行 LWW 一致。`med_changes` 允许 update（批次备注修正）；
+   `checkup_events` 允许 update（下次复查日期改期/备注修正，2026-09-08 补充，契约已同步）。
 2. **medication_changes_note 落库**：02 §3.5 已设专列，03 §3 的展示性备注原样落列。
 3. **`linked_event_id: "$event"`**：03 §5 允许引用"同批载荷 A 新建事件"，但 03 §2
    信封一次只载一种载荷，本批不可能有事件 → 实现拒绝（SCHEMA）。若未来支持复合载荷再放开。

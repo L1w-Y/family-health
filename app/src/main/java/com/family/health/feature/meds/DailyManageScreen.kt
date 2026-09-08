@@ -39,7 +39,7 @@ fun DailyManageScreen(vm: AppViewModel, nav: NavHostController) {
     var editing by remember { mutableStateOf<DailyMedItem?>(null) }
     var showDelete by remember { mutableStateOf(true) }
 
-    Column(modifier = Modifier.padding(horizontal = 14.dp).verticalScroll(rememberScrollState())) {
+    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("今日用药 · 管理", onBack = { nav.popBackStack() })
         PageSub("家里实际执行的服药单，自由填写，与用药页的\"当前方案\"是两回事")
         if (member.daily.isEmpty()) {
