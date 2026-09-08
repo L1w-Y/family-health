@@ -5,21 +5,23 @@
 
 ## 1. 项目一句话
 
-家庭健康管理 App：Android（Kotlin/Compose）+ 腾讯云开发 CloudBase（Go 云函数 + 托管 PostgreSQL + 云存储）。家庭内部使用，无账号体系（家庭口令 + 设备署名）。
+家庭健康管理 App：Android（Kotlin/Compose）+ 自建服务端（腾讯云轻量服务器·香港，Docker Compose 单机：Go 服务 auth/sync/import/backup + PostgreSQL 16 + Caddy 反代）。家庭内部使用，无账号体系（家庭口令 + 设备署名）。
 
 ## 2. 目录地图
 
 ```
 Family-Health/
 ├── AGENTS.md            ← 本文件，工作规则
-├── docs/                ← 契约文档（唯一事实来源），索引见 docs/00-索引.md
+├── docs/                ← 契约文档（唯一事实来源），索引见 docs/00-索引.md；运维见 docs/06-运维手册.md
 ├── prototype/           ← 浏览器可交互原型（静态，python -m http.server 预览）
 │                          页面/交互的参照实现，改 UI 时先看它
-├── server/              ← Go 云函数（部署单元 = functions/ 下每个目录）
-│   ├── functions/       ← auth / sync / import / export / backup，一函数一目录
+├── server/              ← Go 服务端（部署单元 = functions/ 下每个目录）
+│   ├── functions/       ← auth / sync / import / export / backup，一服务一目录
 │   ├── internal/        ← 共享领域包：model / validate / store / authn / httpx
-│   └── scripts/         ← smoke.ps1 等端到端验证脚本
-└── app/                 ← Android 工程（M2 创建，结构届时在本节补充）
+│   ├── deploy/          ← 自建部署：docker-compose / Caddyfile / 备份与重置脚本 / .env（密钥不入库）
+│   ├── build/           ← 交叉编译产物（linux/amd64，不入库）
+│   └── scripts/         ← schema.sql 建表、init-family.sql、smoke.ps1 冒烟、seed-demo.ps1 灌测试数据
+└── app/                 ← Android 工程（Kotlin/Compose/Room，结构与构建见 app/README.md）
 ```
 
 ## 3. 契约体系与同步规则（防文档-代码漂移）
@@ -54,10 +56,12 @@ Family-Health/
 
 ## 6. 环境与命令
 
-- CloudBase 环境：`health-care-d0gccnchda96e436a`（上海，PostgreSQL 共享实例，免费体验版）
+- 生产服务器：腾讯云轻量（香港）`43.161.199.183`（Ubuntu 24.04 + Docker；访问方式与密钥位置见 `docs/06-运维手册.md`）
 - 服务端本地测试：`cd server && go test ./...`；结构检查：`go build ./...`
-- 全链路冒烟：`server/scripts/smoke.ps1`（M1 交付后可用）
-- 部署：tcb CLI（M1 首个函数部署时补充命令于此）
+- 服务端部署：交叉编译 → scp → `docker compose up -d --build <服务>`（完整步骤见 server/README.md「部署」与 docs/06）
+- 全链路冒烟：`server/scripts/smoke.ps1 -BaseUrl http://43.161.199.183 -FamilySecret <口令>`
+- 灌测试数据：`server/scripts/seed-demo.ps1`（假名全覆盖）；清空重置：服务器上 `bash deploy/server-reset.sh`
+- App 构建：`cd app && ./gradlew.bat assembleDebug`（环境要求见 app/README.md）
 
 ## 7. AI 工作指南
 
