@@ -1,13 +1,15 @@
-// 契约：docs/05-页面结构与交互.md §3 今日用药卡/今日用药管理页
+// 契约：docs/05-页面结构与交互.md §3 今日用药卡、§8 今日用药管理
 package com.family.health.feature.meds
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -18,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,270 +30,186 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.family.health.data.nextUnavailableMedicationAt
+import com.family.health.data.projectedMedicationStock
 import com.family.health.data.model.DailyMedItem
 import com.family.health.data.model.Labels
-import com.family.health.ui.components.FChip
+import com.family.health.data.model.MedicationItem
 import com.family.health.ui.components.FhButton
 import com.family.health.ui.components.FhTextField
 import com.family.health.ui.theme.FhColors
+import com.family.health.ui.theme.FhSpace
+import com.family.health.util.deviceTzOffsetMin
+import java.time.Instant
+import java.time.ZoneOffset
 
-/** 今日用药卡内容（概览页复用）：表格化（药品/用量/剩余/预计），中药独立置顶；勾选本机按日清零 */
 @Composable
 fun DailyMedList(
     items: List<DailyMedItem>,
-    checks: Set<String>,
-    onToggleCheck: (String) -> Unit,
+    medications: List<MedicationItem>,
+    nowMs: Long = System.currentTimeMillis(),
 ) {
-    if (items.isEmpty()) {
-        Text(
-            "还没设置今日用药，点右上角\"管理\"添加",
-            fontSize = 13.sp, color = FhColors.Text2,
-        )
-        return
-    }
-    val west = items.filter { !it.isTcm }
-    val tcm = items.filter { it.isTcm }
+    val activeById = medications.filter { it.endDate == null }.associateBy { it.id }
+    val rows = items.mapNotNull { daily -> activeById[daily.medicationItemId]?.let { daily to it } }
+    if (rows.isEmpty()) return
 
-    // 表头
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 1.dp)) {
-        Spacer(Modifier.width(64.dp))
-        Text("药品", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
-            modifier = Modifier.weight(1.35f))
-        Text("用量", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
-            modifier = Modifier.weight(1f))
-        Text("剩余", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
-            modifier = Modifier.weight(0.95f))
-        Text("预计", fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny,
-            modifier = Modifier.weight(0.7f))
+        Spacer(Modifier.width(30.dp))
+        Header("药品", 1.35f); Header("用量", 1f); Header("剩余", .8f); Header("预计", 1f)
     }
-
-    // 中药置顶（药品栏着色，无单独提示头）
-    tcm.forEach { x ->
-        val leftDays = ((x.tcmPacks ?: 0.0) * x.tcmDaysPerPack - x.tcmUsedDays).toInt()
-        MedTableRow(
-            checked = x.id in checks,
-            barColor = FhColors.TcmText,
-            barLabel = "药",
-            nameColor = FhColors.TcmText,
-            name = x.name, dose = "每副 ${x.tcmDaysPerPack} 天",
-            stock = "${x.tcmPacks?.toInt() ?: 0} 副",
-            days = "${maxOf(leftDays, 0)}天",
-            onToggle = { onToggleCheck(x.id) },
-        )
-    }
-
-    // 西药：药在每个所属时段各显示一行（早/中/晚/睡前 字样 + 竖条着色）
-    Labels.SLOTS.forEach { (key, label) ->
-        west.filter { key in it.doseSlots }.forEach { x ->
-            MedTableRow(
-                checked = x.id in checks,
-                barColor = slotBarColor(key),
-                barLabel = label,
-                nameColor = null,
-                name = x.name, dose = x.doseText,
-                stock = x.stockQty?.let { s -> "${s.toInt()}${x.stockUnit}" } ?: "—",
-                days = x.daysLeft?.let { "${it}天" } ?: "—",
-                onToggle = { onToggleCheck(x.id) },
-            )
+    Labels.SLOTS.forEach { (slot, slotLabel) ->
+        val group = rows.filter { (_, med) -> slot in med.doseSlots }
+        if (group.isNotEmpty()) {
+            SlotGroup(slot, slotLabel) {
+                group.forEach { (daily, med) ->
+                    val dose = med.doseQty ?: 0.0
+                    val remaining = projectedMedicationStock(daily, dose, nowMs)[slot] ?: 0.0
+                    val unavailableAt = nextUnavailableMedicationAt(slot, remaining, dose, nowMs, daily.tzOffsetMin)
+                    MedDataRow(
+                        name = med.name,
+                        dose = if (dose > 0) "${numberText(dose)}${med.doseUnit}" else "待补用量",
+                        stock = "${numberText(remaining)}${med.doseUnit}",
+                        expected = unavailableAt?.let { deadlineText(it, nowMs, daily.tzOffsetMin) } ?: "—",
+                    )
+                }
+            }
         }
     }
 }
 
-private fun slotBarColor(key: String): androidx.compose.ui.graphics.Color = when (key) {
-    "morning" -> FhColors.Primary
-    "noon" -> FhColors.Amber
-    "evening" -> FhColors.TcmText
-    else -> androidx.compose.ui.graphics.Color(0xFF6B7FA3) // bedtime 蓝灰
+@Composable
+private fun RowScope.Header(text: String, weight: Float) {
+    Text(text, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Tiny, modifier = Modifier.weight(weight))
 }
 
 @Composable
-private fun MedTableRow(
-    checked: Boolean, barColor: androidx.compose.ui.graphics.Color, barLabel: String,
-    nameColor: androidx.compose.ui.graphics.Color?,
-    name: String, dose: String, stock: String, days: String,
-    onToggle: () -> Unit,
-) {
+private fun SlotGroup(slot: String, label: String, rows: @Composable () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min).padding(vertical = 2.dp),
     ) {
-        // 40dp 点击域保证可点（内部 Checkbox 仅作展示）
         Box(
             contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .width(40.dp)
-                .clickable(onClick = onToggle),
+            modifier = Modifier.width(26.dp).fillMaxHeight().clip(RoundedCornerShape(7.dp)).background(slotSoftColor(slot)),
         ) {
-            androidx.compose.material3.Checkbox(
-                checked = checked,
-                onCheckedChange = null,
-                colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = FhColors.Primary),
-            )
+            Text(label, fontSize = 10.sp, color = slotBarColor(slot), fontWeight = FontWeight.Bold)
         }
-        // 时段竖条 + 字样
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.width(20.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(3.dp)
-                    .height(16.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(barColor),
-            )
-            Text(barLabel, fontSize = 9.sp, color = barColor, fontWeight = FontWeight.Bold)
-        }
-        Text(
-            name, fontSize = 13.sp, fontWeight = FontWeight.Bold,
-            color = nameColor ?: if (checked) FhColors.Text2 else FhColors.Text,
-            textDecoration = if (checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-            modifier = Modifier.weight(1.35f).padding(start = 4.dp),
-            maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-        )
+        Spacer(Modifier.width(4.dp))
+        Column(modifier = Modifier.weight(1f)) { rows() }
+    }
+}
+
+@Composable
+private fun MedDataRow(name: String, dose: String, stock: String, expected: String) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(name, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+            modifier = Modifier.weight(1.35f), maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(dose, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(1f))
-        Text(stock, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(0.95f))
-        Text(days, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(0.7f))
+        Text(stock, fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.weight(.8f))
+        Text(expected, fontSize = 11.sp, color = FhColors.Text2, modifier = Modifier.weight(1f), maxLines = 1)
     }
 }
 
-@Composable
-private fun SlotHeader(label: String, tcm: Boolean) {
-    Row(
-        modifier = Modifier
-            .padding(top = 8.dp, bottom = 3.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(7.dp))
-            .background(if (tcm) FhColors.TcmSoft else FhColors.PrimarySoft)
-            .padding(horizontal = 8.dp, vertical = 3.dp),
-    ) {
-        Text(
-            label, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-            color = if (tcm) FhColors.TcmText else FhColors.Primary,
-        )
-    }
-}
-
-@Composable
-private fun DailyCheckRow(
-    checked: Boolean, name: String, dose: String, stock: String,
-    onToggle: () -> Unit, onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-    ) {
-        androidx.compose.material3.Checkbox(
-            checked = checked,
-            onCheckedChange = { onToggle() },
-            colors = androidx.compose.material3.CheckboxDefaults.colors(checkedColor = FhColors.Primary),
-            modifier = Modifier.padding(end = 2.dp),
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .clickable(onClick = onClick),
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    name, fontSize = 14.sp, fontWeight = FontWeight.Bold,
-                    color = if (checked) FhColors.Text2 else FhColors.Text,
-                    textDecoration = if (checked) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(dose, fontSize = 13.sp, color = FhColors.Text2)
-            }
-        }
-        Text(stock, fontSize = 11.sp, color = FhColors.Text2)
-    }
-}
-
-/** 今日用药编辑弹层（契约 §3：西药项/中药项的增删改） */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DailyEditSheet(
+fun DailyStockEditSheet(
     initial: DailyMedItem,
+    medication: MedicationItem,
     onSave: (DailyMedItem) -> Unit,
-    onDelete: ((String) -> Unit)?,
+    onDelete: (() -> Unit)?,
     onDismiss: () -> Unit,
 ) {
-    var name by remember(initial.id) { mutableStateOf(initial.name) }
-    var dose by remember(initial.id) { mutableStateOf(initial.doseText) }
-    var daily by remember(initial.id) { mutableStateOf(initial.dailyQty?.toInt()?.toString() ?: "1") }
-    var stock by remember(initial.id) { mutableStateOf(initial.stockQty?.toInt()?.toString() ?: "") }
-    var unit by remember(initial.id) { mutableStateOf(initial.stockUnit) }
-    var slots by remember(initial.id) { mutableStateOf(initial.doseSlots.toSet()) }
-    var packs by remember(initial.id) { mutableStateOf(initial.tcmPacks?.toInt()?.toString() ?: "0") }
-    var dpp by remember(initial.id) { mutableStateOf(initial.tcmDaysPerPack.toString()) }
-    var used by remember(initial.id) { mutableStateOf(initial.tcmUsedDays.toString()) }
+    var stocks by remember(initial.id) {
+        mutableStateOf(medication.doseSlots.associateWith { initial.stockBySlot[it]?.let(::numberText) ?: "" })
+    }
+    var error by remember(initial.id) { mutableStateOf<String?>(null) }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
         Column(
-            modifier = Modifier
-                .padding(start = 18.dp, end = 18.dp, bottom = 26.dp)
-                .verticalScroll(rememberScrollState()),
+            modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 26.dp).verticalScroll(rememberScrollState()),
         ) {
-            Text("编辑今日用药", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text2,
-                modifier = Modifier.padding(bottom = 10.dp))
-            FhTextField(name, { name = it }, "名称")
-            if (initial.isTcm) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FhTextField(packs, { packs = it }, "剩余副数", Modifier.weight(1f), number = true)
-                    FhTextField(dpp, { dpp = it }, "每副吃几天", Modifier.weight(1f), number = true)
-                    FhTextField(used, { used = it }, "当前这副已吃", Modifier.weight(1f), number = true)
+            Text(medication.name, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+            Text(
+                "一次 ${medication.doseQty?.let(::numberText) ?: "—"}${medication.doseUnit} · 一天 ${medication.doseTimesPerDay ?: "—"} 次",
+                fontSize = 13.sp, color = FhColors.Text2, modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+            )
+            Text("请填写各时段剩余药量", fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.padding(bottom = 6.dp))
+            SlotStockGrid(medication, stocks) { slot, value -> stocks = stocks + (slot to value) }
+            error?.let { Text(it, fontSize = 12.sp, color = FhColors.InputError, modifier = Modifier.padding(bottom = 8.dp)) }
+            FhButton("保存盘点", onClick = {
+                val parsed = medication.doseSlots.associateWith { stocks[it].orEmpty().toDoubleOrNull() }
+                if (parsed.values.any { it == null || it < 0 }) {
+                    error = "请填写每个药格的非负剩余数量"
+                    return@FhButton
                 }
-            } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FhTextField(dose, { dose = it }, "每次用量", Modifier.weight(1f))
-                    FhTextField(daily, { daily = it }, "每日用量/天", Modifier.weight(1f), number = true)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FhTextField(stock, { stock = it }, "剩余量", Modifier.weight(1f), number = true)
-                    FhTextField(unit, { unit = it }, "单位", Modifier.weight(1f))
-                }
-                FieldLabel("服用时段")
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Labels.SLOTS.forEach { (key, label) ->
-                        FChip(label, on = key in slots) {
-                            slots = if (key in slots) slots - key else slots + key
-                        }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-            }
-            FhButton("保 存", onClick = {
-                val saved = if (initial.isTcm) {
-                    initial.copy(
-                        name = name.ifBlank { initial.name },
-                        tcmPacks = packs.toDoubleOrNull() ?: 0.0,
-                        tcmDaysPerPack = dpp.toIntOrNull() ?: 1,
-                        tcmUsedDays = used.toIntOrNull() ?: 0,
-                    )
-                } else {
-                    initial.copy(
-                        name = name.ifBlank { initial.name },
-                        doseText = dose,
-                        dailyQty = daily.toDoubleOrNull() ?: 1.0,
-                        stockQty = stock.ifBlank { null }?.toDoubleOrNull(),
-                        stockUnit = unit.ifBlank { "片" },
-                        doseSlots = Labels.SLOTS.map { it.first }.filter { it in slots },
-                    )
-                }
-                onSave(saved)
+                onSave(initial.copy(
+                    stockBySlot = parsed.mapValues { it.value!! },
+                    stockCountedAtMs = System.currentTimeMillis(),
+                    tzOffsetMin = deviceTzOffsetMin(),
+                ))
             })
-            if (onDelete != null) {
-                FhButton("删除此项", onClick = { onDelete(initial.id) }, ghost = true)
-            }
+            onDelete?.let { FhButton("移出今日用药", onClick = it, ghost = true) }
         }
     }
+}
+
+private fun deadlineText(deadlineMs: Long, nowMs: Long, offsetMin: Int): String {
+    val offset = ZoneOffset.ofTotalSeconds(offsetMin * 60)
+    val deadline = Instant.ofEpochMilli(deadlineMs).atOffset(offset).toLocalDate()
+    val today = Instant.ofEpochMilli(nowMs).atOffset(offset).toLocalDate()
+    return when (deadline.toEpochDay() - today.toEpochDay()) {
+        0L -> "今天"
+        1L -> "明天"
+        else -> "%02d/%02d".format(deadline.monthValue, deadline.dayOfMonth)
+    }
+}
+
+internal fun numberText(value: Double): String =
+    if (value == kotlin.math.floor(value)) value.toLong().toString() else value.toString().trimEnd('0').trimEnd('.')
+
+private fun slotBarColor(key: String) = when (key) {
+    "morning" -> FhColors.SlotMorning; "noon" -> FhColors.SlotNoon
+    "evening" -> FhColors.SlotEvening; else -> FhColors.SlotBedtime
+}
+
+private fun slotSoftColor(key: String) = when (key) {
+    "morning" -> FhColors.SlotMorningSoft; "noon" -> FhColors.SlotNoonSoft
+    "evening" -> FhColors.SlotEveningSoft; else -> FhColors.SlotBedtimeSoft
 }
 
 @Composable
 fun FieldLabel(text: String) {
-    Text(
-        text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
-        modifier = Modifier.padding(bottom = 6.dp),
-    )
+    Text(text, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+        modifier = Modifier.padding(bottom = 6.dp))
+}
+
+/** 四个时段（早/中/晚/睡前）固定展示；仅药品实际服用的时段可编辑，其余置灰。 */
+@Composable
+internal fun SlotStockGrid(
+    medication: MedicationItem,
+    stocks: Map<String, String>,
+    onStockChange: (String, String) -> Unit,
+) {
+    Labels.SLOTS.chunked(2).forEach { slots ->
+        Row(horizontalArrangement = Arrangement.spacedBy(FhSpace.Related)) {
+            slots.forEach { (key, label) ->
+                val editable = key in medication.doseSlots
+                FhTextField(
+                    value = stocks[key].orEmpty(),
+                    onChange = { onStockChange(key, it) },
+                    label = label,
+                    modifier = Modifier.weight(1f),
+                    decimal = true,
+                    enabled = editable,
+                    placeholder = if (editable) "剩余${medication.doseUnit}" else "不服用",
+                )
+            }
+        }
+    }
 }

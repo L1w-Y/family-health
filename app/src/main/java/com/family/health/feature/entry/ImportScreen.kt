@@ -1,6 +1,8 @@
 // 契约：docs/05 §8 记复查（导入）：粘贴 → dry_run 预检 → 逐项核对 → 确认入库（docs/03 §2 dry_run）
 package com.family.health.feature.entry
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -87,7 +89,7 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController) {
     }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        PageTitle("记复查", onBack = { nav.popBackStack() })
+        PageTitle(form = true, title = "记复查", onBack = { nav.popBackStack() })
         StepsBar(total = 4, active = step)
 
         when (step) {
@@ -96,7 +98,6 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController) {
                     text, { text = it },
                     "粘贴外部 AI 整理好的文本（JSON）",
                     multiline = true,
-                    placeholder = "{\"format\":\"family-health-import\",...}",
                 )
                 FhButton("填入示例文本", onClick = { text = IMPORT_SAMPLE }, ghost = true)
                 FhButton(if (busy) "预检中…" else "预 检", onClick = {
@@ -119,12 +120,12 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController) {
                 OkBox {
                     Text(
                         "✓ 服务端预检通过：将写入 报告 ${d.reportCount} 份 · 指标 ${d.indicatorCount} 项",
-                        fontSize = 13.sp, color = FhColors.Primary, lineHeight = 21.sp,
+                        fontSize = FhType.Label, color = FhColors.Primary, lineHeight = 21.sp,
                     )
                     if (ev != null) {
                         Text(
                             "日期：${ev.checkupDate}　医院：${ev.hospital.ifEmpty { "—" }}　科室：${ev.department.ifEmpty { "—" }}\n下次复查：${ev.nextCheckupDate ?: "—"}",
-                            fontSize = 13.sp, color = FhColors.Primary, lineHeight = 21.sp,
+                            fontSize = FhType.Label, color = FhColors.Primary, lineHeight = 21.sp,
                         )
                     }
                 }
@@ -135,26 +136,26 @@ fun ImportScreen(vm: AppViewModel, nav: NavHostController) {
             3 -> preview?.let { ev ->
                 ev.reports.forEach { r ->
                     FhCard {
-                        Text(r.title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+                        Text(r.title, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text,
                             modifier = Modifier.padding(bottom = 6.dp))
                         Row {
-                            Text("项目", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+                            Text("项目", fontSize = FhType.Caption, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
                                 modifier = Modifier.weight(1.4f))
-                            Text("结果", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+                            Text("结果", fontSize = FhType.Caption, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
                                 modifier = Modifier.weight(1f))
-                            Text("参考区间", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+                            Text("参考区间", fontSize = FhType.Caption, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
                                 modifier = Modifier.weight(1f))
                         }
                         r.indicators.forEach { it ->
                             Row(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                                Text(it.itemName, fontSize = 13.5.sp, color = FhColors.Text, modifier = Modifier.weight(1.4f))
+                                Text(it.itemName, fontSize = FhType.Label, color = FhColors.Text, modifier = Modifier.weight(1.4f))
                                 Row(modifier = Modifier.weight(1f)) {
-                                    Text(it.displayValue, fontSize = 13.5.sp, color = FhColors.Text)
+                                    Text(it.displayValue, fontSize = FhType.Label, color = FhColors.Text)
                                     if (it.unit.isNotEmpty()) {
-                                        Text(" ${it.unit}", fontSize = 12.sp, color = FhColors.Text2)
+                                        Text(" ${it.unit}", fontSize = FhType.Caption, color = FhColors.Text2)
                                     }
                                 }
-                                Text(it.referenceRange.ifEmpty { "—" }, fontSize = 13.5.sp, color = FhColors.Text2,
+                                Text(it.referenceRange.ifEmpty { "—" }, fontSize = FhType.Label, color = FhColors.Text2,
                                     modifier = Modifier.weight(1f))
                             }
                         }

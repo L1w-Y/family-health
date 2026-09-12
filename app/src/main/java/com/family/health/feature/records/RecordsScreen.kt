@@ -1,8 +1,12 @@
-// 契约：docs/05-页面结构与交互.md §4 Tab 2 记录（复查段含重点指标表；测量段统计卡+当日明细）
+// 契约：docs/05-页面结构与交互.md §4 Tab 2 记录（复查段含重点指标表；测量段日期分组表+当日明细）
 package com.family.health.feature.records
 
+import com.family.health.ui.theme.FhType
+
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,9 +36,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.family.health.data.AppViewModel
+import com.family.health.data.MeasurePeriod
 import com.family.health.data.indicatorPoints
 import com.family.health.data.model.Labels
 import com.family.health.data.model.Measurement
+import com.family.health.data.model.WatchItem
 import com.family.health.ui.Routes
 import com.family.health.ui.components.CardHead
 import com.family.health.ui.components.EmptyHint
@@ -46,11 +52,13 @@ import com.family.health.ui.components.RowLine1
 import com.family.health.ui.components.RowLine2
 import com.family.health.ui.components.SegControl
 import com.family.health.ui.theme.FhColors
-import com.family.health.util.daysTo
-import com.family.health.util.mmdd
-import com.family.health.util.weekdayCn
-import kotlin.math.roundToInt
 
+import com.family.health.util.mmdd
+import java.time.LocalDate
+
+
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
@@ -58,9 +66,11 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
     var dayDetail by remember { mutableStateOf<String?>(null) }
     var editing by remember { mutableStateOf<Measurement?>(null) }
     var showAddWatch by remember { mutableStateOf(false) }
+    var removingWatch by remember { mutableStateOf<WatchItem?>(null) }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        SegControl(listOf("复查", "测量"), if (ui.recordsSeg == "checkup") 0 else 1) {
+        SegControl(listOf("复查", "测量"), if (ui.recordsSeg == "checkup") 0 else 1,
+            compact = ui.recordsSeg != "checkup") {
             vm.setRecordsSeg(if (it == 0) "checkup" else "measure")
         }
 
@@ -73,12 +83,12 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
                     EmptyHint("重点清单为空，点右上角\"＋ 添加\"")
                 } else {
                     // 表头
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.background(FhColors.SurfaceVariant)) {
                         Spacer(Modifier.width(84.dp))
                         eventsDesc.forEachIndexed { i, e ->
                             if (i > 0) ColDivider()
                             Text(
-                                mmdd(e.checkupDate), fontSize = 10.5.sp, color = FhColors.Text2,
+                                mmdd(e.checkupDate), fontSize = FhType.Caption, color = FhColors.Text2,
                                 fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
                                 modifier = Modifier.weight(1f).padding(vertical = 3.dp),
                             )
@@ -90,10 +100,13 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
                         val byDate = pts.associateBy { it.date }
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.clickable { nav.navigate(Routes.indicator(w.canonicalName)) },
+                            modifier = Modifier.combinedClickable(
+                                onClick = { nav.navigate(Routes.indicator(w.canonicalName)) },
+                                onLongClick = { removingWatch = w },
+                            ),
                         ) {
                             Text(
-                                w.canonicalName, fontSize = 11.5.sp, color = FhColors.Text,
+                                w.canonicalName, fontSize = FhType.Caption, color = FhColors.Text,
                                 modifier = Modifier.width(84.dp).padding(vertical = 4.dp),
                                 maxLines = 2, lineHeight = 14.sp,
                             )
@@ -101,7 +114,7 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
                                 if (i > 0) ColDivider()
                                 Text(
                                     byDate[e.checkupDate]?.displayValue ?: "—",
-                                    fontSize = 11.5.sp, color = FhColors.Text, textAlign = TextAlign.Center,
+                                    fontSize = FhType.Caption, color = FhColors.Text, textAlign = TextAlign.Center,
                                     modifier = Modifier.weight(1f).padding(vertical = 4.dp),
                                 )
                             }
@@ -110,7 +123,6 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
                     }
                 }
             }
-
             // 复查事件列表（契约 §4.1：日期+科室，摘要从简）
             CardHead("复查记录")
             if (member.events.isEmpty()) {
@@ -119,32 +131,27 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
             member.events.sortedByDescending { it.checkupDate }.forEach { e ->
                 RowCard(onClick = { nav.navigate(Routes.event(e.id)) }) {
                     RowLine1 {
-                        Text(e.checkupDate, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-                        Text(e.department, fontSize = 12.sp, color = FhColors.Text2)
+                        Text(e.checkupDate, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                        Text(e.department, fontSize = FhType.Caption, color = FhColors.Text2)
                     }
                     if (e.note.isNotEmpty()) {
-                        RowLine2(e.note, color = androidx.compose.ui.graphics.Color(0xFF8A9089))
+                        RowLine2(e.note, color = FhColors.Text2)
                     }
                 }
             }
         } else {
-            // 测量段：类型 + 周期 chips，统计卡（最新值/均值/按日行，点行看明细）
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 10.dp)) {
-                FChip("血压", on = ui.measureType == "bp") { vm.setMeasureType("bp") }
-                FChip("血糖", on = ui.measureType == "glucose") { vm.setMeasureType("glucose") }
-                Spacer(Modifier.weight(1f))
-                listOf(3, 7, 30).forEach { d ->
-                    FChip("${d}天", on = ui.trendDays == d) { vm.setTrendDays(d) }
-                }
-            }
-            val recs = member.measurements.filter {
-                it.type == ui.measureType && !it.deleted && daysTo(it.date) >= -ui.trendDays
-            }
-            if (recs.isEmpty()) {
-                EmptyHint("该周期内暂无记录，点底部 ＋ 记一条")
-            } else {
-                MeasureStatCard(recs, ui.measureType, ui.trendDays) { dayDetail = it }
-            }
+            val today = LocalDate.now()
+            val anchor = ui.measurementAnchor?.let(LocalDate::parse) ?: today
+            MeasurementLog(
+                measurements = member.measurements, memberId = member.id,
+                type = ui.measureType, granularity = ui.measurementGranularity,
+                anchor = anchor, today = today,
+                onTypeChange = vm::setMeasureType,
+                onGranularityChange = vm::setMeasurementGranularity,
+                onShift = vm::shiftMeasurementWindow,
+                onAnchorChange = vm::setMeasurementAnchor,
+                onDayClick = { dayDetail = it },
+            )
         }
         Spacer(Modifier.height(8.dp))
     }
@@ -152,7 +159,7 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
     // 当日明细（契约 §4.2：逐条时刻、数值、署名；可编辑/删除）
     dayDetail?.let { day ->
         val recs = member.measurements
-            .filter { it.date == day && !it.deleted }
+            .filter { it.date == day && it.type == ui.measureType && !it.deleted }
             .sortedBy { it.measuredAt }
         DayDetailSheet(
             day = day,
@@ -181,6 +188,30 @@ fun RecordsScreen(vm: AppViewModel, nav: NavHostController) {
     if (showAddWatch) {
         AddWatchSheet(vm, onDone = { showAddWatch = false })
     }
+
+    // 移出重点清单确认（契约 §4.1：长按行可移除）
+    removingWatch?.let { w ->
+        AlertDialog(
+            onDismissRequest = { removingWatch = null },
+            title = { Text("移出重点清单", fontSize = FhType.Body, fontWeight = FontWeight.Bold) },
+            text = {
+                Text(
+                    "将「${w.canonicalName}」从重点指标对比中移除？历史指标与报告不受影响。",
+                    fontSize = FhType.Label, color = FhColors.Text, lineHeight = 20.sp,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.removeWatch(w.id)
+                    vm.toast("已移出重点清单")
+                    removingWatch = null
+                }) { Text("移除", color = FhColors.Primary, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { removingWatch = null }) { Text("取消", color = FhColors.Text2) }
+            },
+        )
+    }
 }
 
 @Composable
@@ -192,72 +223,6 @@ private fun ColDivider() = androidx.compose.foundation.layout.Box(
 private fun RowDivider() = androidx.compose.foundation.layout.Box(
     Modifier.fillMaxWidth().height(1.dp).background(FhColors.Line)
 )
-
-/** 测量统计卡：最新值 + 均值/最高/最低 + 按日数值行（点行看当日明细） */
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
-@Composable
-private fun MeasureStatCard(
-    recs: List<Measurement>, type: String, days: Int,
-    onDayClick: (String) -> Unit,
-) {
-    val sorted = recs.sortedBy { it.measuredAt }
-    FhCard(contentPadding = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
-        val last = sorted.last()
-        Row(verticalAlignment = Alignment.Bottom, modifier = Modifier.padding(vertical = 2.dp)) {
-            Text(
-                if (type == "bp") "${last.systolic}/${last.diastolic}" else "${last.glucoseMmol}",
-                fontSize = 19.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
-            )
-            Text(mmdd(last.date), fontSize = 11.sp, color = FhColors.Text2,
-                modifier = Modifier.padding(start = 8.dp))
-            Spacer(Modifier.weight(1f))
-            Text("${sorted.size} 条 · 近${days}天", fontSize = 11.sp, color = FhColors.Text2)
-        }
-        val stat = if (type == "bp") {
-            val sys = sorted.mapNotNull { it.systolic }
-            val dia = sorted.mapNotNull { it.diastolic }
-            "均值 ${sys.average().roundToInt()}/${dia.average().roundToInt()}" +
-                " · 最高 ${sys.maxOrNull()}/${dia.maxOrNull()}" +
-                " · 最低 ${sys.minOrNull()}/${dia.minOrNull()}"
-        } else {
-            val v = sorted.mapNotNull { it.glucoseMmol }
-            "均值 ${"%.1f".format(v.average())} · 最高 ${v.maxOrNull()} · 最低 ${v.minOrNull()}"
-        }
-        Text(stat, fontSize = 11.sp, color = FhColors.Text2,
-            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp))
-        sorted.groupBy { it.date }.toSortedMap(compareByDescending { it }).forEach { (day, dayRecs) ->
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onDayClick(day) }
-                    .padding(vertical = 4.dp),
-            ) {
-                Column(modifier = Modifier.width(44.dp)) {
-                    Text(mmdd(day), fontSize = 11.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2)
-                    Text(weekdayCn(day), fontSize = 9.sp, color = FhColors.Tiny)
-                }
-                androidx.compose.foundation.layout.FlowRow {
-                    dayRecs.sortedBy { it.measuredAt }.forEach { x ->
-                        Text(
-                            if (type == "bp") {
-                                buildString {
-                                    append("${x.systolic}/${x.diastolic}")
-                                    x.heartRateBpm?.let { append("·$it") }
-                                    append(" ${x.time}")
-                                }
-                            } else {
-                                "${x.glucoseMmol} ${Labels.sceneName(x.glucoseContext)} ${x.time}"
-                            },
-                            fontSize = 12.sp, color = FhColors.Text,
-                            modifier = Modifier.padding(end = 12.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -273,13 +238,13 @@ private fun AddWatchSheet(vm: AppViewModel, onDone: () -> Unit) {
         .filter { name -> member.watchlist.none { w -> name == w.canonicalName || name in w.aliases } }
     ModalBottomSheet(onDismissRequest = onDone) {
         Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 26.dp)) {
-            Text("加入重点清单", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text2,
+            Text("加入重点清单", fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text2,
                 modifier = Modifier.padding(bottom = 10.dp))
             FhTextField(manual, { manual = it }, "手输指标名（可填别名合并历史）")
             if (manual.isNotBlank()) {
                 Text(
                     "＋ 加入\"$manual\"",
-                    fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
+                    fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
                     modifier = Modifier
                         .clickable {
                             vm.addWatch(manual.trim())
@@ -289,16 +254,16 @@ private fun AddWatchSheet(vm: AppViewModel, onDone: () -> Unit) {
                         .padding(vertical = 10.dp),
                 )
             }
-            Text("从报告指标中选择", fontSize = 12.sp, color = FhColors.Text2,
+            Text("从报告指标中选择", fontSize = FhType.Caption, color = FhColors.Text2,
                 modifier = Modifier.padding(top = 4.dp, bottom = 6.dp))
             if (candidates.isEmpty()) {
-                Text("暂无可选指标", fontSize = 13.sp, color = FhColors.Text2,
+                Text("暂无可选指标", fontSize = FhType.Label, color = FhColors.Text2,
                     modifier = Modifier.padding(vertical = 8.dp))
             }
             Column(modifier = Modifier.verticalScroll(rememberScrollState()).weight(1f, fill = false)) {
                 candidates.forEach { name ->
                     Text(
-                        name, fontSize = 14.sp, color = FhColors.Text,
+                        name, fontSize = FhType.Label, color = FhColors.Text,
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
@@ -312,109 +277,4 @@ private fun AddWatchSheet(vm: AppViewModel, onDone: () -> Unit) {
             }
         }
     }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DayDetailSheet(
-    day: String,
-    recs: List<Measurement>,
-    onEdit: (Measurement) -> Unit,
-    onDelete: (Measurement) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, bottom = 26.dp)) {
-            Text(
-                "$day · ${recs.size} 条记录",
-                fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FhColors.Text2,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            recs.forEach { x ->
-                RowCard {
-                    RowLine1 {
-                        Text(measurementSummary(x), fontSize = 14.sp, color = FhColors.Text)
-                        Text(x.time, fontSize = 12.sp, color = FhColors.Text2)
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(top = 3.dp),
-                    ) {
-                        Text("由 ${x.createdBy} 录入", fontSize = 13.sp, color = FhColors.Text2)
-                        Spacer(Modifier.weight(1f))
-                        Text("编辑", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
-                            modifier = Modifier.clickable { onEdit(x) }.padding(horizontal = 6.dp))
-                        Text("删除", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Amber,
-                            modifier = Modifier.clickable { onDelete(x) }.padding(horizontal = 6.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun measurementSummary(m: Measurement): String = when (m.type) {
-    "bp" -> "血压 ${m.systolic}/${m.diastolic} mmHg" + (m.heartRateBpm?.let { " · 心率$it" } ?: "")
-    "glucose" -> "血糖 ${m.glucoseMmol} mmol/L · ${Labels.sceneName(m.glucoseContext)}"
-    else -> "心率 ${m.heartRateBpm} 次/分"
-}
-
-/** 单条编辑（契约 §4.2：修正手误，保留原录入署名） */
-@Composable
-private fun MeasurementEditDialog(
-    initial: Measurement,
-    onSave: (Measurement) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    var sys by remember { mutableStateOf(initial.systolic?.toString() ?: "") }
-    var dia by remember { mutableStateOf(initial.diastolic?.toString() ?: "") }
-    var hr by remember { mutableStateOf(initial.heartRateBpm?.toString() ?: "") }
-    var glu by remember { mutableStateOf(initial.glucoseMmol?.toString() ?: "") }
-    var ctx by remember { mutableStateOf(initial.glucoseContext ?: "fasting") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("编辑测量（署名保留：${initial.createdBy}）", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                if (initial.type == "bp") {
-                    FhTextField(sys, { sys = it }, "高压 (mmHg)", number = true)
-                    FhTextField(dia, { dia = it }, "低压 (mmHg)", number = true)
-                    FhTextField(hr, { hr = it }, "心率", number = true)
-                } else {
-                    FhTextField(glu, { glu = it }, "血糖 (mmol/L)", number = true)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Labels.GLUCOSE_SCENES.take(3).forEach { (key, label) ->
-                            FChip(label, on = ctx == key) { ctx = key }
-                        }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                        Labels.GLUCOSE_SCENES.drop(3).forEach { (key, label) ->
-                            FChip(label, on = ctx == key) { ctx = key }
-                        }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = {
-                val saved = if (initial.type == "bp") {
-                    initial.copy(
-                        systolic = sys.toIntOrNull() ?: return@TextButton,
-                        diastolic = dia.toIntOrNull() ?: return@TextButton,
-                        heartRateBpm = hr.toIntOrNull(),
-                    )
-                } else {
-                    initial.copy(
-                        glucoseMmol = glu.toDoubleOrNull() ?: return@TextButton,
-                        glucoseContext = ctx,
-                    )
-                }
-                onSave(saved)
-            }) { Text("保存", color = FhColors.Primary, fontWeight = FontWeight.Bold) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = FhColors.Text2) }
-        },
-    )
 }

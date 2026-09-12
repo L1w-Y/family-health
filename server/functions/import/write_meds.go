@@ -83,6 +83,15 @@ func planMedChanges(ctx context.Context, st store.Store, dev *model.Device, prof
 		row["med_kind"] = kind
 		row["name"] = si.Name
 		row["dosage_text"] = si.DosageText
+		if si.DoseQty != nil {
+			row["dose_qty"] = *si.DoseQty
+		}
+		if si.DoseUnit != "" {
+			row["dose_unit"] = si.DoseUnit
+		}
+		if si.DoseTimes != nil {
+			row["dose_times_per_day"] = *si.DoseTimes
+		}
 		if len(si.DoseSlots) > 0 {
 			slots := make([]any, len(si.DoseSlots))
 			for j, s := range si.DoseSlots {

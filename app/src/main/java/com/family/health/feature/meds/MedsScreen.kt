@@ -1,6 +1,8 @@
 // 契约：docs/05-页面结构与交互.md §5 Tab 3 用药（方案 · 档案层）
 package com.family.health.feature.meds
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +22,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.family.health.data.AppViewModel
+import com.family.health.data.model.dosageLabel
 import com.family.health.ui.Routes
 import com.family.health.ui.components.CardHead
 import com.family.health.ui.components.FTag
@@ -41,24 +44,24 @@ fun MedsScreen(vm: AppViewModel, nav: NavHostController) {
             verticalAlignment = Alignment.Bottom,
             modifier = Modifier.padding(start = 2.dp, end = 2.dp, bottom = 8.dp),
         ) {
-            Text("当前方案 · 长期 ${current.size} 种", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+            Text("当前方案 · 长期 ${current.size} 种", fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
             Spacer(Modifier.weight(1f))
-            Text("点卡片编辑详情", fontSize = 12.sp, color = FhColors.Text2)
+            Text("点卡片编辑详情", fontSize = FhType.Caption, color = FhColors.Text2)
         }
         if (current.isEmpty()) {
-            FhCard { Text("暂无进行中的长期用药", fontSize = 13.sp, color = FhColors.Text2) }
+            FhCard { Text("暂无进行中的长期用药", fontSize = FhType.Label, color = FhColors.Text2) }
         }
         current.forEach { med ->
             FhCard(onClick = { nav.navigate(Routes.medEdit(med.id)) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(med.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                    Text(med.name, fontSize = FhType.Item, fontWeight = FontWeight.SemiBold, color = FhColors.Text)
                     if (med.medKind == "tcm") {
                         Spacer(Modifier.width(6.dp))
                         FTag("中药")
                     }
                     SlotTags(med.doseSlots)
                 }
-                Text(med.dosageText, fontSize = 14.sp, color = FhColors.Text, modifier = Modifier.padding(top = 5.dp))
+                Text(med.dosageLabel, fontSize = FhType.Body, color = FhColors.Text, modifier = Modifier.padding(top = 5.dp))
             }
         }
         if (temp.isNotEmpty()) {
@@ -69,15 +72,15 @@ fun MedsScreen(vm: AppViewModel, nav: NavHostController) {
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.padding(vertical = 5.dp),
                     ) {
-                        Text(x.name, fontSize = 14.sp, color = FhColors.Text)
+                        Text(x.name, fontSize = FhType.Label, color = FhColors.Text)
                         if (x.medKind == "tcm") {
                             Spacer(Modifier.width(6.dp))
                             FTag("中药")
                         }
                         Spacer(Modifier.weight(1f))
                         Text(
-                            "${x.dosageText} · 至 ${x.endDate ?: "未定"}",
-                            fontSize = 13.sp, color = FhColors.Text2,
+                            "${x.dosageLabel} · 至 ${x.endDate ?: "未定"}",
+                            fontSize = FhType.Label, color = FhColors.Text2,
                         )
                     }
                 }

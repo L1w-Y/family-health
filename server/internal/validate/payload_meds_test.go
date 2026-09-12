@@ -106,6 +106,24 @@ func TestMedsStartFields(t *testing.T) {
 	if !hasError(es, "payload.start[0].med_kind", CodeEnum) {
 		t.Fatalf("expect med_kind ENUM, got %v", es)
 	}
+	// 结构化一次用量必须为正数且有单位
+	_, es, _, _ = parse(t, medsBody(`"effective_date":"2026-08-15","start":[{"name":"药","dose_qty":0,"dose_unit":"片"}]`))
+	if !hasError(es, "payload.start[0].dose_qty", CodeValueRange) {
+		t.Fatalf("expect dose_qty VALUE_RANGE, got %v", es)
+	}
+	_, es, _, _ = parse(t, medsBody(`"effective_date":"2026-08-15","start":[{"name":"药","dose_qty":1}]`))
+	if !hasError(es, "payload.start[0].dose_unit", CodeRequired) {
+		t.Fatalf("expect dose_unit REQUIRED, got %v", es)
+	}
+	_, es, _, _ = parse(t, medsBody(`"effective_date":"2026-08-15","start":[{"name":"药","dose_unit":"片"}]`))
+	if !hasError(es, "payload.start[0].dose_qty", CodeRequired) {
+		t.Fatalf("expect dose_qty REQUIRED, got %v", es)
+	}
+	_, es, _, _ = parse(t, medsBody(`"effective_date":"2026-08-15","start":[{
+	  "name":"药","dose_qty":1,"dose_unit":"片","dose_times_per_day":3,"dose_slots":["morning","evening"]}]`))
+	if !hasError(es, "payload.start[0].dose_times_per_day", CodeSchema) {
+		t.Fatalf("expect dose times/slots SCHEMA, got %v", es)
+	}
 	// dose_slots 枚举与去重
 	_, es, _, _ = parse(t, medsBody(`"effective_date":"2026-08-15",
 	  "start":[{"name":"药","dose_slots":["morning","midnight"]}]`))

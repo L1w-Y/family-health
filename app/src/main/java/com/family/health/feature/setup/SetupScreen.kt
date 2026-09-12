@@ -1,6 +1,8 @@
 // 首次启动配置：服务器地址 + 家庭口令 + 设备署名 → auth → 全量同步（契约：docs/02 §3.2）
 package com.family.health.feature.setup
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -34,16 +36,16 @@ fun SetupScreen(vm: AppViewModel) {
     var name by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        PageTitle("连接家庭服务器")
+        PageTitle(form = true, title = "连接家庭服务器")
         Text(
             "同一家庭的所有设备使用同一个家庭口令。",
-            fontSize = 13.sp, color = FhColors.Text2, lineHeight = 20.sp,
+            fontSize = FhType.Label, color = FhColors.Text2, lineHeight = 20.sp,
             modifier = Modifier.padding(bottom = 14.dp),
         )
         FhTextField(secret, { secret = it.trim() }, "家庭口令")
         FhTextField(name, { name = it.trim() }, "这台设备的署名")
         st.error?.let {
-            Text(it, fontSize = 13.sp, color = FhColors.Amber, lineHeight = 19.sp,
+            Text(it, fontSize = FhType.Label, color = FhColors.InputError, lineHeight = 19.sp,
                 modifier = Modifier.padding(bottom = 10.dp))
         }
         FhButton(if (st.loading) "连接并同步中…" else "连 接", onClick = {

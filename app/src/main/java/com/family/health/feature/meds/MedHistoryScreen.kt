@@ -1,6 +1,8 @@
 // 契约：docs/05-页面结构与交互.md §5 历史用药独立页（按变化节点分段）
 package com.family.health.feature.meds
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
@@ -42,15 +44,15 @@ fun MedHistoryScreen(vm: AppViewModel, nav: NavHostController) {
             FhCard {
                 Text(
                     "${seg.from} 起" + if (seg.to == "至今") " · 至今" else " ~ ${seg.to}",
-                    fontSize = 14.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+                    fontSize = FhType.Label, fontWeight = FontWeight.Bold, color = FhColors.Text,
                 )
                 if (change != null && change.note.isNotEmpty()) {
                     Row12 {
-                        Text(change.note, fontSize = 12.sp, color = FhColors.Text2)
+                        Text(change.note, fontSize = FhType.Caption, color = FhColors.Text2)
                         if (linked != null) {
                             Text(
                                 " · 关联 ${linked.checkupDate} 复查",
-                                fontSize = 12.sp, color = FhColors.Primary,
+                                fontSize = FhType.Caption, color = FhColors.Primary,
                                 modifier = Modifier.clickable { nav.navigate(Routes.event(linked.id)) },
                             )
                         }
@@ -58,11 +60,11 @@ fun MedHistoryScreen(vm: AppViewModel, nav: NavHostController) {
                 }
                 Text(
                     "西药：" + (seg.active.filter { it.medKind == "western" }.joinToString("、") { it.name }.ifEmpty { "无" }),
-                    fontSize = 13.5.sp, color = FhColors.Text, modifier = Modifier.padding(top = 6.dp),
+                    fontSize = FhType.Label, color = FhColors.Text, modifier = Modifier.padding(top = 6.dp),
                 )
                 Text(
                     "中药：" + (seg.active.filter { it.medKind == "tcm" }.joinToString("、") { it.name }.ifEmpty { "无" }),
-                    fontSize = 13.5.sp, color = FhColors.Text, modifier = Modifier.padding(top = 2.dp),
+                    fontSize = FhType.Label, color = FhColors.Text, modifier = Modifier.padding(top = 2.dp),
                 )
             }
         }

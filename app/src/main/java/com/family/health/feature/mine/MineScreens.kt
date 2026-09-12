@@ -1,6 +1,8 @@
 // 契约：docs/05-页面结构与交互.md §6 Tab 4 我的
 package com.family.health.feature.mine
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -57,10 +59,10 @@ fun MineScreen(vm: AppViewModel, nav: NavHostController) {
                 Avatar("家", 44)
                 Spacer(Modifier.width(12.dp))
                 Column {
-                    Text(ui.familyName, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                    Text(ui.familyName, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
                     Text(
                         "${ui.members.size} 位成员 · ${ui.devices.size} 台设备",
-                        fontSize = 12.sp, color = FhColors.Text2,
+                        fontSize = FhType.Caption, color = FhColors.Text2,
                     )
                 }
             }
@@ -69,21 +71,13 @@ fun MineScreen(vm: AppViewModel, nav: NavHostController) {
             listOf(
                 "成员档案管理" to "${ui.members.size} 份档案",
                 "家庭口令与设备" to "${ui.devices.size} 台设备",
-                "提醒设置" to "服药 / 测量 / 复查",
-                "API 令牌" to "供 HTTP 导入",
                 "数据导出" to "JSON + 照片包",
-                "服务器与账号" to "连接 / 同步状态",
-                "关于与隐私说明" to "",
             )
         ) { i ->
             when (i) {
                 0 -> nav.navigate(Routes.MEMBERS)
                 1 -> nav.navigate(Routes.DEVICES)
-                2 -> nav.navigate(Routes.REMINDERS)
-                3 -> nav.navigate(Routes.TOKEN)
-                4 -> nav.navigate(Routes.EXPORT)
-                5 -> nav.navigate(Routes.ACCOUNT)
-                6 -> nav.navigate(Routes.ABOUT)
+                2 -> nav.navigate(Routes.EXPORT)
             }
         }
     }
@@ -95,15 +89,15 @@ fun MembersScreen(vm: AppViewModel, nav: NavHostController) {
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("成员档案", onBack = { nav.popBackStack() }) {
             Text(
-                "＋ 添加", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
+                "＋ 添加", fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
                 modifier = Modifier.clickable { nav.navigate(Routes.memberEdit(null)) }.padding(4.dp),
             )
         }
         ui.members.forEach { m ->
             RowCard(onClick = { nav.navigate(Routes.memberEdit(m.id)) }) {
                 RowLine1 {
-                    Text(m.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
-                    Text("${m.relation} · ${m.genderLabel}", fontSize = 12.sp, color = FhColors.Text2)
+                    Text(m.name, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                    Text("${m.relation} · ${m.genderLabel}", fontSize = FhType.Caption, color = FhColors.Text2)
                 }
                 RowLine2(m.profileNote.ifEmpty { "未填写档案说明" })
             }
@@ -122,16 +116,16 @@ fun MemberEditScreen(vm: AppViewModel, nav: NavHostController, memberId: String?
     var note by remember { mutableStateOf(existing?.profileNote ?: "") }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        PageTitle(if (memberId != null) "编辑档案" else "添加成员", onBack = { nav.popBackStack() })
+        PageTitle(if (memberId != null) "编辑档案" else "添加成员", form = true, onBack = { nav.popBackStack() })
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             FhTextField(name, { name = it }, "姓名/称呼", Modifier.weight(1f))
-            FhTextField(relation, { relation = it }, "关系", Modifier.weight(1f), placeholder = "爷爷")
+            FhTextField(relation, { relation = it }, "关系", Modifier.weight(1f))
         }
         FieldLabel("性别")
         SegControl(listOf("男", "女"), if (gender == "female") 1 else 0) {
             gender = if (it == 1) "female" else "male"
         }
-        FhTextField(birth, { birth = it }, "出生日期", placeholder = "1952-03-12")
+        FhTextField(birth, { birth = it }, "出生日期")
         FhTextField(note, { note = it }, "档案说明（自由书写：确诊疾病、过敏史、手术史…）", multiline = true)
         FhButton("保 存", onClick = {
             if (name.isBlank()) {
@@ -153,27 +147,27 @@ fun DevicesScreen(vm: AppViewModel, nav: NavHostController) {
         PageTitle("家庭口令与设备", onBack = { nav.popBackStack() })
         FhCard {
             CardHead("家庭口令", "更换 ›") { vm.toast("更换后所有设备需重新输入") }
-            Text("新设备首次使用需输入家庭口令完成署名", fontSize = 13.sp, color = FhColors.Text2)
+            Text("新设备首次使用需输入家庭口令完成署名", fontSize = FhType.Label, color = FhColors.Text2)
         }
         Text(
-            "已接入设备", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+            "已接入设备", fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text,
             modifier = Modifier.padding(start = 2.dp, top = 4.dp, bottom = 8.dp),
         )
         ui.devices.forEach { d ->
             RowCard {
                 RowLine1 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(d.displayName, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                        Text(d.displayName, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
                         if (d.self) {
                             Spacer(Modifier.width(6.dp))
                             FTag("本机")
                         }
                     }
                     if (d.self) {
-                        Text("当前设备", fontSize = 12.sp, color = FhColors.Text2)
+                        Text("当前设备", fontSize = FhType.Caption, color = FhColors.Text2)
                     } else {
                         Text(
-                            "吊销", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
+                            "吊销", fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
                             modifier = Modifier.clickable {
                                 vm.revokeDevice(d.id)
                                 vm.toast("已吊销")
@@ -197,7 +191,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
         PageSub("当前成员：${member.name}")
 
         FhCard {
-            Text("服药提醒", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+            Text("服药提醒", fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text,
                 modifier = Modifier.padding(bottom = 8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 r.medTimes.forEachIndexed { i, t ->
@@ -213,11 +207,11 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
             }
             Text(
                 "通知内容自动拼接当前用药方案，用药变动无需改提醒",
-                fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.padding(top = 8.dp),
+                fontSize = FhType.Caption, color = FhColors.Text2, modifier = Modifier.padding(top = 8.dp),
             )
         }
         FhCard {
-            Text("测量提醒", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+            Text("测量提醒", fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text,
                 modifier = Modifier.padding(bottom = 8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 r.measureTimes.forEachIndexed { i, t ->
@@ -233,7 +227,7 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
             }
         }
         FhCard {
-            Text("复查提醒", fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+            Text("复查提醒", fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text,
                 modifier = Modifier.padding(bottom = 8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 r.advanceDays.forEach { d ->
@@ -242,13 +236,13 @@ fun RemindersScreen(vm: AppViewModel, nav: NavHostController) {
             }
             Text(
                 "按复查事件的\"下次复查日期\"触发",
-                fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.padding(top = 8.dp),
+                fontSize = FhType.Caption, color = FhColors.Text2, modifier = Modifier.padding(top = 8.dp),
             )
         }
         WarnBox {
             Text(
                 "首次使用请按引导开启\"自启动 / 电池无限制\"，避免系统杀后台导致通知延迟。",
-                fontSize = 13.sp, color = FhColors.Amber, lineHeight = 21.sp,
+                fontSize = FhType.Label, color = FhColors.Amber, lineHeight = 21.sp,
             )
         }
     }
@@ -265,10 +259,10 @@ fun TokenScreen(vm: AppViewModel, nav: NavHostController) {
             KvRow("当前令牌") {
                 Text(
                     vm.deviceToken().let { if (it.length > 12) it.take(8) + "…" + it.takeLast(6) else it },
-                    fontSize = 14.sp, color = FhColors.Text,
+                    fontSize = FhType.Label, color = FhColors.Text,
                 )
             }
-            KvRow("署名") { Text(session.deviceName, fontSize = 14.sp, color = FhColors.Text) }
+            KvRow("署名") { Text(session.deviceName, fontSize = FhType.Label, color = FhColors.Text) }
         }
         FhButton("复制完整令牌", onClick = {
             clipboard.setText(androidx.compose.ui.text.AnnotatedString(vm.deviceToken()))
@@ -276,7 +270,7 @@ fun TokenScreen(vm: AppViewModel, nav: NavHostController) {
         }, ghost = true)
         Text(
             "换新令牌：在\"服务器与账号\"里重新配置（会清空本机数据并重新拉取）。",
-            fontSize = 12.sp, color = FhColors.Text2, lineHeight = 18.sp,
+            fontSize = FhType.Caption, color = FhColors.Text2, lineHeight = 18.sp,
             modifier = Modifier.padding(top = 4.dp),
         )
     }
@@ -290,9 +284,9 @@ fun ExportScreen(vm: AppViewModel, nav: NavHostController) {
         ui.members.forEach { m ->
             RowCard {
                 RowLine1 {
-                    Text(m.name, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                    Text(m.name, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
                     Text(
-                        "导出 ›", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
+                        "导出 ›", fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
                         modifier = Modifier.clickable { vm.toast("导出功能将在后续版本提供") },
                     )
                 }
@@ -301,7 +295,7 @@ fun ExportScreen(vm: AppViewModel, nav: NavHostController) {
         }
         Text(
             "导出格式与导入格式 v1 同字段，导出物可再导入（防锁定保险）。",
-            fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+            fontSize = FhType.Caption, color = FhColors.Text2, modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
         )
     }
 }
@@ -317,7 +311,7 @@ fun AboutScreen(vm: AppViewModel, nav: NavHostController) {
                     "· 报告参考区间为原文存档，请以医生解读为准\n" +
                     "· 数据存储于家庭自有的云环境，可随时导出\n" +
                     "· 整理报告文本给外部 AI 前，请先隐去姓名、证件号",
-                fontSize = 14.sp, color = FhColors.Text, lineHeight = 27.sp,
+                fontSize = FhType.Label, color = FhColors.Text, lineHeight = 27.sp,
             )
         }
     }

@@ -150,6 +150,9 @@ type StartItem struct {
 	Kind       string   `json:"med_kind,omitempty"` // 缺省 western
 	Name       string   `json:"name"`
 	DosageText string   `json:"dosage_text,omitempty"`
+	DoseQty    *float64 `json:"dose_qty,omitempty"`
+	DoseUnit   string   `json:"dose_unit,omitempty"`
+	DoseTimes  *int     `json:"dose_times_per_day,omitempty"`
 	DoseSlots  []string `json:"dose_slots,omitempty"`
 	StartDate  string   `json:"start_date,omitempty"`
 	EndDate    string   `json:"end_date,omitempty"`

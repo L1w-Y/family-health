@@ -191,13 +191,13 @@ Push $d1 @(
   Row 'med_changes' @{ id = $c5; profile_id = $p2; effective_date = '2025-06-10'; note = '初始建档' }
 ) '用药变化'
 Push $d1 @(
-  Row 'medication_items' @{ id = $m4; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '缬沙坦'; dosage_text = '每次 80mg'; dose_slots = @('morning'); start_date = '2025-11-20'; end_date = '2026-08-15'; change_id = $c4 }
-  Row 'medication_items' @{ id = $m2; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '二甲双胍'; dosage_text = '每次 0.5g'; dose_slots = @('morning', 'evening'); start_date = '2025-11-20'; change_id = $c4 }
-  Row 'medication_items' @{ id = $m1; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '氯沙坦钾片'; dosage_text = '每次 50mg'; dose_slots = @('morning'); start_date = '2026-08-15'; supersedes_id = $m4; change_id = $c1 }
-  Row 'medication_items' @{ id = $m3; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '阿托伐他汀钙片'; dosage_text = '每次 20mg'; dose_slots = @('bedtime'); start_date = '2026-08-15'; change_id = $c1 }
-  Row 'medication_items' @{ id = $m5; profile_id = $p1; category = 'temporary'; med_kind = 'western'; name = '连花清瘟胶囊'; dosage_text = '每次 4 粒'; dose_slots = @('morning', 'noon', 'evening'); start_date = '2026-08-01'; end_date = '2026-08-06'; change_id = $c2 }
+  Row 'medication_items' @{ id = $m4; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '缬沙坦'; dosage_text = ''; dose_qty = 1; dose_unit = '片'; dose_times_per_day = 1; dose_slots = @('morning'); start_date = '2025-11-20'; end_date = '2026-08-15'; change_id = $c4 }
+  Row 'medication_items' @{ id = $m2; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '二甲双胍'; dosage_text = ''; dose_qty = 1; dose_unit = '片'; dose_times_per_day = 2; dose_slots = @('morning', 'evening'); start_date = '2025-11-20'; change_id = $c4 }
+  Row 'medication_items' @{ id = $m1; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '氯沙坦钾片'; dosage_text = ''; dose_qty = 1; dose_unit = '片'; dose_times_per_day = 1; dose_slots = @('morning'); start_date = '2026-08-15'; supersedes_id = $m4; change_id = $c1 }
+  Row 'medication_items' @{ id = $m3; profile_id = $p1; category = 'long_term'; med_kind = 'western'; name = '阿托伐他汀钙片'; dosage_text = ''; dose_qty = 1; dose_unit = '片'; dose_times_per_day = 1; dose_slots = @('bedtime'); start_date = '2026-08-15'; change_id = $c1 }
+  Row 'medication_items' @{ id = $m5; profile_id = $p1; category = 'temporary'; med_kind = 'western'; name = '连花清瘟胶囊'; dosage_text = ''; dose_qty = 4; dose_unit = '粒'; dose_times_per_day = 3; dose_slots = @('morning', 'noon', 'evening'); start_date = '2026-08-01'; end_date = '2026-08-06'; change_id = $c2 }
   Row 'medication_items' @{ id = $m6; profile_id = $p1; category = 'temporary'; med_kind = 'tcm'; name = '益肾健脾方'; dosage_text = '7 剂，水煎服'; dose_slots = @('morning', 'evening'); start_date = '2026-06-02'; end_date = '2026-06-16'; change_id = $c3 }
-  Row 'medication_items' @{ id = $m7; profile_id = $p2; category = 'long_term'; med_kind = 'western'; name = '苯磺酸氨氯地平片'; dosage_text = '每次 5mg'; dose_slots = @('morning'); start_date = '2025-06-10'; change_id = $c5 }
+  Row 'medication_items' @{ id = $m7; profile_id = $p2; category = 'long_term'; med_kind = 'western'; name = '苯磺酸氨氯地平片'; dosage_text = ''; dose_qty = 1; dose_unit = '片'; dose_times_per_day = 1; dose_slots = @('morning'); start_date = '2025-06-10'; change_id = $c5 }
 ) '用药'
 
 # ===== 7. 提醒（服药/测量/复查三类） =====
@@ -219,14 +219,14 @@ Push $d1 @(
   Row 'notes' @{ id = (Uid); profile_id = $p2; text = '降压药快吃完了，下周记得陪她去社区医院开药。'; done = $false; remind_at = (Ms '2026-09-08' '09:00'); tz_offset_min = 480; remind_targets = @() }
 ) '便签'
 
-# ===== 9. 今日用药（西药余量/中药计数） =====
+# ===== 9. 今日用药（关联方案 + 各药格盘点量） =====
 Write-Host '== 9. 今日用药 =='
+$stockCountedAt = [DateTimeOffset]::Now.ToUnixTimeMilliseconds()
 Push $d1 @(
-  Row 'daily_med_items' @{ id = (Uid); profile_id = $p1; is_tcm = $false; name = '氯沙坦钾片'; dose_text = '1 片'; dose_slots = @('morning'); stock_qty = 18; stock_unit = '片'; daily_qty = 1 }
-  Row 'daily_med_items' @{ id = (Uid); profile_id = $p1; is_tcm = $false; name = '二甲双胍'; dose_text = '1 片'; dose_slots = @('morning', 'evening'); stock_qty = 42; stock_unit = '片'; daily_qty = 2 }
-  Row 'daily_med_items' @{ id = (Uid); profile_id = $p1; is_tcm = $false; name = '阿托伐他汀钙片'; dose_text = '1 片'; dose_slots = @('bedtime'); stock_qty = 9; stock_unit = '片'; daily_qty = 1 }
-  Row 'daily_med_items' @{ id = (Uid); profile_id = $p1; is_tcm = $true; name = '益肾健脾方'; tcm_packs = 5; tcm_days_per_pack = 2; tcm_used_days = 1 }
-  Row 'daily_med_items' @{ id = (Uid); profile_id = $p2; is_tcm = $false; name = '苯磺酸氨氯地平片'; dose_text = '1 片'; dose_slots = @('morning'); stock_qty = 25; stock_unit = '片'; daily_qty = 1 }
+  Row 'daily_med_items' @{ id = $m1; profile_id = $p1; medication_item_id = $m1; stock_by_slot = @{ morning = 18 }; stock_counted_at = $stockCountedAt; tz_offset_min = 480 }
+  Row 'daily_med_items' @{ id = $m2; profile_id = $p1; medication_item_id = $m2; stock_by_slot = @{ morning = 21; evening = 21 }; stock_counted_at = $stockCountedAt; tz_offset_min = 480 }
+  Row 'daily_med_items' @{ id = $m3; profile_id = $p1; medication_item_id = $m3; stock_by_slot = @{ bedtime = 9 }; stock_counted_at = $stockCountedAt; tz_offset_min = 480 }
+  Row 'daily_med_items' @{ id = $m7; profile_id = $p2; medication_item_id = $m7; stock_by_slot = @{ morning = 25 }; stock_counted_at = $stockCountedAt; tz_offset_min = 480 }
 ) '今日用药'
 
 # ===== 10. 附件元数据（归档到具体报告） =====

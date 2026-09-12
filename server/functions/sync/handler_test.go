@@ -220,6 +220,41 @@ func TestMedSupersedesChain(t *testing.T) {
 	}
 }
 
+func TestDailyMedicationStockFollowsMedicationSlots(t *testing.T) {
+	h, _ := testServer(t)
+	medicationID := "44444444-4444-4444-8444-444444444444"
+	rec := do(t, h, http.MethodPost, "/sync", `{"table":"medication_items","op":"insert","row":{
+	  "id":"`+medicationID+`","profile_id":"p1","category":"long_term","med_kind":"western",
+	  "name":"白领片","start_date":"2026-01-01","dose_qty":4,"dose_unit":"颗","dose_times_per_day":3,
+	  "dose_slots":["morning","noon","evening"]}}`, "stock-med")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("structured medication rejected: %d %s", rec.Code, rec.Body.String())
+	}
+	rec = do(t, h, http.MethodPost, "/sync", `{"table":"medication_items","op":"insert","row":{
+	  "id":"77777777-7777-4777-8777-777777777777","profile_id":"p1","category":"long_term","med_kind":"western",
+	  "name":"次数冲突药","start_date":"2026-01-01","dose_qty":1,"dose_unit":"片","dose_times_per_day":3,
+	  "dose_slots":["morning","evening"]}}`, "stock-med-mismatch")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("dose times/slots mismatch must be rejected: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(t, h, http.MethodPost, "/sync", `{"table":"daily_med_items","op":"insert","row":{
+	  "id":"55555555-5555-4555-8555-555555555555","profile_id":"p1",
+	  "medication_item_id":"`+medicationID+`","stock_by_slot":{"morning":12,"noon":12,"evening":12},
+	  "stock_counted_at":1789056000000,"tz_offset_min":480}}`, "stock-valid")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("valid per-slot stock rejected: %d %s", rec.Code, rec.Body.String())
+	}
+
+	rec = do(t, h, http.MethodPost, "/sync", `{"table":"daily_med_items","op":"insert","row":{
+	  "id":"66666666-6666-4666-8666-666666666666","profile_id":"p1",
+	  "medication_item_id":"`+medicationID+`","stock_by_slot":{"bedtime":12},
+	  "stock_counted_at":1789056000000,"tz_offset_min":480}}`, "stock-invalid-slot")
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("stock outside medication slots must be rejected: %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestUnauthorized(t *testing.T) {
 	h, _ := testServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/sync?since=0", nil)

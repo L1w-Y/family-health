@@ -1,6 +1,8 @@
 // 契约：docs/05-页面结构与交互.md §1 导航、§2 中央"＋"动作面板、§3 成员切换条
 package com.family.health.ui
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,10 +30,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.List
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.List
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -43,6 +45,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -180,7 +184,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 28.dp),
             ) {
                 Text(
-                    ui.toast?.text.orEmpty(), color = Color.White, fontSize = 14.sp,
+                    ui.toast?.text.orEmpty(), color = Color.White, fontSize = FhType.Label,
                     modifier = Modifier
                         .clip(RoundedCornerShape(99.dp))
                         .background(FhColors.ToastBg)
@@ -227,7 +231,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
         AlertDialog(
             onDismissRequest = { showMemberSwitch = false },
             confirmButton = {},
-            title = { Text("切换成员", fontSize = 16.sp, fontWeight = FontWeight.Bold) },
+            title = { Text("切换成员", fontSize = FhType.Body, fontWeight = FontWeight.Bold) },
             text = {
                 Column {
                     ui.members.forEach { m ->
@@ -245,10 +249,10 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                             Avatar(m.name, 38)
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(m.name, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                                Text(m.name, fontSize = FhType.Body, fontWeight = FontWeight.Bold)
                                 Text(
                                     m.events.firstOrNull()?.let { "${it.checkupDate} 复查过" } ?: "暂无复查记录",
-                                    fontSize = 12.sp, color = FhColors.Text2, modifier = Modifier.padding(top = 2.dp),
+                                    fontSize = FhType.Caption, color = FhColors.Text2, modifier = Modifier.padding(top = 2.dp),
                                 )
                             }
                             if (m.id == ui.currentMemberId) {
@@ -268,7 +272,7 @@ fun AppRoot(vm: AppViewModel = viewModel()) {
                     ) {
                         Avatar("＋", 38, FhColors.Tiny)
                         Spacer(Modifier.width(12.dp))
-                        Text("添加成员", fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                        Text("添加成员", fontSize = FhType.Body, fontWeight = FontWeight.Bold)
                     }
                 }
             },
@@ -282,7 +286,7 @@ private fun currentTabOf(route: String?): String =
 @Composable
 private fun SheetGroup(title: String, content: @Composable () -> Unit) {
     Text(
-        title, fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FhColors.Text2,
+        title, fontSize = FhType.Label, fontWeight = FontWeight.Bold, color = FhColors.Text2,
         modifier = Modifier.padding(start = 2.dp, top = 14.dp, bottom = 8.dp),
     )
     content()
@@ -293,13 +297,13 @@ private fun SheetAction(text: String, modifier: Modifier, enabled: Boolean = tru
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(12.dp))
-            .background(FhColors.Bg)
+            .background(if (enabled) FhColors.SurfaceVariant else FhColors.DisabledContainer)
             .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(14.dp),
     ) {
         Text(
-            text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold,
-            color = if (enabled) FhColors.Text else FhColors.Tiny,
+            text, fontSize = FhType.Body, fontWeight = FontWeight.SemiBold,
+            color = if (enabled) FhColors.Text else FhColors.DisabledContent,
         )
     }
 }
@@ -319,7 +323,7 @@ private fun MemberBar(
             .padding(top = 8.dp, bottom = 10.dp),
     ) {
         Text(
-            name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = FhColors.Primary,
+            name, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Primary,
             modifier = Modifier
                 .clip(RoundedCornerShape(99.dp))
                 .background(FhColors.PrimarySoft)
@@ -332,10 +336,10 @@ private fun MemberBar(
 private data class TabSpec(val route: String, val label: String, val icon: ImageVector)
 
 private val TABS = listOf(
-    TabSpec(Routes.HOME, "概览", Icons.Filled.Home),
-    TabSpec(Routes.RECORDS, "记录", Icons.Filled.List),
-    TabSpec(Routes.MEDS, "用药", Icons.Filled.Favorite),
-    TabSpec(Routes.MINE, "我的", Icons.Filled.Person),
+    TabSpec(Routes.HOME, "概览", Icons.Outlined.Home),
+    TabSpec(Routes.RECORDS, "记录", Icons.Outlined.List),
+    TabSpec(Routes.MEDS, "用药", Icons.Outlined.FavoriteBorder),
+    TabSpec(Routes.MINE, "我的", Icons.Outlined.Person),
 )
 
 /** 底部 4 Tab + 中央「＋」（契约 §1） */
@@ -346,6 +350,7 @@ private fun TabBar(currentRoute: String?, onTab: (String) -> Unit, onPlus: () ->
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Color.White)
+                .drawBehind { drawLine(FhColors.Line, Offset.Zero, Offset(size.width, 0f), 1.dp.toPx()) }
                 .padding(top = 1.dp)
                 .height(62.dp),
         ) {
@@ -359,7 +364,7 @@ private fun TabBar(currentRoute: String?, onTab: (String) -> Unit, onPlus: () ->
                 .align(Alignment.TopCenter)
                 .offset(y = (-18).dp)
                 .size(52.dp)
-                .shadow(6.dp, CircleShape)
+                .shadow(2.dp, CircleShape)
                 .clip(CircleShape)
                 .background(FhColors.Primary)
                 .clickable(onClick = onPlus),
@@ -383,7 +388,7 @@ private fun TabItem(spec: TabSpec, currentRoute: String?, onTab: (String) -> Uni
             modifier = Modifier.size(22.dp),
         )
         Text(
-            spec.label, fontSize = 11.sp,
+            spec.label, fontSize = FhType.Caption,
             fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
             color = if (on) FhColors.Primary else FhColors.Text2,
         )

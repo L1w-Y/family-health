@@ -59,7 +59,7 @@ Family-Health/
 | 指标项目 | IndicatorItem | 原文名存档，归并靠 WatchItem.aliases |
 | 用药条目 | MedicationItem | 生命周期 start/end + supersedes |
 | 用药变化 | MedChange | 调整批次，事由只在这里 |
-| 今日用药 | DailyMedItem | 执行层清单，与方案无外键关联 |
+| 今日用药 | DailyMedItem | 当前用药方案的药盒库存执行层，关联 MedicationItem 并按时段保存盘点量 |
 | 便签 | Note | remind_at 自驱动本地提醒 |
 
 ## 6. 环境与命令

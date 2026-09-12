@@ -1,15 +1,15 @@
 // 契约：docs/05-页面结构与交互.md §3 Tab 1 概览（复查气泡 / 便签 / 今日测量 / 今日用药）
 package com.family.health.feature.overview
 
-import androidx.compose.foundation.ExperimentalFoundationApi
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +33,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.family.health.data.AppViewModel
+import com.family.health.data.MeasurementTimeBucket
 import com.family.health.data.model.Measurement
 import com.family.health.data.nextCheckup
 import com.family.health.feature.meds.DailyMedList
@@ -40,18 +42,20 @@ import com.family.health.ui.components.CardHead
 import com.family.health.ui.components.FhCard
 import com.family.health.ui.theme.FhColors
 import com.family.health.util.todayStr
+import kotlinx.coroutines.delay
+import java.time.Duration
+import java.time.ZonedDateTime
 
 @Composable
 fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    vm.checkTick.collectAsStateWithLifecycle() // 勾选变化驱动重组
     val member = ui.currentMember
+    val today by rememberToday()
     var showDatePicker = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-    var showTimePicker = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         // 下次复查气泡（置顶，无图标；点时间可改期）
-        val next = nextCheckup(member, todayStr())
+        val next = nextCheckup(member, today)
         val targetEvent = next ?: member.events.maxByOrNull { it.checkupDate }
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -63,11 +67,11 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
                 .background(FhColors.Card)
                 .padding(horizontal = 10.dp, vertical = 9.dp),
         ) {
-            Text("下次复查", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+            Text("下次复查", fontSize = FhType.Label, fontWeight = FontWeight.Bold, color = FhColors.Text)
             Spacer(Modifier.weight(1f))
             Text(
                 next?.nextCheckupDate ?: "未设置",
-                fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                fontSize = FhType.Label, fontWeight = FontWeight.Bold,
                 color = if (next != null) FhColors.Primary else FhColors.Text2,
                 modifier = Modifier
                     .clip(RoundedCornerShape(8.dp))
@@ -83,7 +87,7 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
         }
         if (showDatePicker.value && targetEvent != null) {
             com.family.health.ui.components.FhDateTimePickerDialog(
-                initialDate = next?.nextCheckupDate ?: todayStr(),
+                initialDate = next?.nextCheckupDate ?: today,
                 initialTime = null,
                 needDate = true,
                 needTime = false,
@@ -103,7 +107,7 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
         FhCard(onClick = { nav.navigate(Routes.NOTES) }) {
             CardHead("便签", "全部 ›") { nav.navigate(Routes.NOTES) }
             if (member.notes.isEmpty()) {
-                Text("暂无便签，点这里写一条 ›", fontSize = 13.sp, color = FhColors.Text2)
+                Text("暂无便签，点这里写一条 ›", fontSize = FhType.Label, color = FhColors.Text2)
             }
             member.notes.filter { !it.done }.take(5).forEachIndexed { i, n ->
                 Row(
@@ -113,128 +117,109 @@ fun OverviewScreen(vm: AppViewModel, nav: NavHostController) {
                     // 无提醒也占位，保持文本对齐
                     Text(
                         if (n.remindAt != null) "⏰" else "",
-                        fontSize = 12.sp,
+                        fontSize = FhType.Caption,
                         modifier = Modifier.width(20.dp).padding(top = 1.dp),
                     )
                     Text(
-                        n.text, fontSize = 13.5.sp, color = FhColors.Text, lineHeight = 20.sp,
+                        n.text, fontSize = FhType.Label, color = FhColors.Text, lineHeight = 20.sp,
                         modifier = Modifier.weight(1f),
                     )
                 }
                 if (i < member.notes.filter { !it.done }.take(5).lastIndex) {
                     androidx.compose.foundation.layout.Box(
                         Modifier.fillMaxWidth().height(1.dp)
-                            .background(androidx.compose.ui.graphics.Color(0xFFF0F1EE)),
+                            .background(FhColors.Line),
                     )
                 }
             }
         }
 
-        // 今日测量（两行四列占位气泡：点气泡记一条，长按空气泡设提醒）
+        // 今日测量（两行四列 = measured_at 派生时间段；血糖另显场景）
         TodayMeasureGrid(
-            recs = member.measurements.filter { it.date == todayStr() && !it.deleted },
-            onCellClick = { type -> nav.navigate(Routes.measureForm(type)) },
-            onCellLongPress = { showTimePicker.value = true },
+            recs = member.measurements.filter { it.date == today && !it.deleted },
         )
-        if (showTimePicker.value) {
-            com.family.health.ui.components.FhDateTimePickerDialog(
-                initialDate = todayStr(),
-                initialTime = null,
-                needDate = false,
-                needTime = true,
-                title = "每天测量提醒",
-                onConfirm = { _, time ->
-                    if (time != null) {
-                        vm.addMeasureReminderTime(time)
-                        vm.toast("已添加每天 $time 提醒")
-                    }
-                    showTimePicker.value = false
-                },
-                onDismiss = { showTimePicker.value = false },
-            )
-        }
 
         // 今日用药卡（契约 §3：表格化，编辑在管理页）
         FhCard {
             CardHead("今日用药", "管理 ›") { nav.navigate(Routes.DAILY) }
-            DailyMedList(
-                items = member.daily,
-                checks = vm.dailyCheckedSet(),
-                onToggleCheck = { vm.toggleDailyChecked(it) },
-            )
+            DailyMedList(items = member.daily, medications = member.meds)
         }
     }
 }
 
-private val MEASURE_BUCKETS = listOf("空腹", "上午", "下午", "晚上")
-
-private fun bucketOf(time: String): Int {
-    val h = time.substringBefore(":").toIntOrNull() ?: return 1
-    return when (h) {
-        in 5..8 -> 0
-        in 9..11 -> 1
-        in 12..17 -> 2
-        else -> 3
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun TodayMeasureGrid(
     recs: List<Measurement>,
-    onCellClick: (String) -> Unit,
-    onCellLongPress: () -> Unit,
 ) {
     FhCard {
         CardHead("今日测量")
-        // 列头置顶：空腹 上午 下午 晚上
+        // 列头只表达时间；“空腹”等场景仅属于血糖记录内容。
         Row(modifier = Modifier.padding(start = 34.dp, bottom = 2.dp)) {
-            MEASURE_BUCKETS.forEach { b ->
+            MeasurementTimeBucket.ALL.forEach { bucket ->
                 Text(
-                    b, fontSize = 10.sp, color = FhColors.Tiny, textAlign = TextAlign.Center,
+                    bucket.label, fontSize = FhType.Caption, color = FhColors.Tiny,
+                    textAlign = TextAlign.Center,
                     modifier = Modifier.weight(1f).padding(horizontal = 3.dp),
                 )
             }
         }
         listOf("glucose" to "血糖", "bp" to "血压").forEach { (type, label) ->
+            val cells = todayMeasurementCells(recs, type)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(vertical = 4.dp),
             ) {
                 Text(
-                    label, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+                    label, fontSize = FhType.Caption, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
                     modifier = Modifier.width(34.dp),
                 )
-                MEASURE_BUCKETS.forEachIndexed { col, _ ->
-                    val x = recs.filter { it.type == type && bucketOf(it.time) == col }
-                        .maxByOrNull { it.measuredAt }
+                MeasurementTimeBucket.ALL.forEach { bucket ->
+                    val cell = cells[bucket]
+                    val x = cell?.latest
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
                             .weight(1f)
                             .padding(horizontal = 3.dp)
-                            .aspectRatio(1.9f)
+                            .defaultMinSize(minHeight = 46.dp)
                             .clip(RoundedCornerShape(10.dp))
-                            .background(if (x != null) FhColors.PrimarySoft else FhColors.ChipGray)
-                            .combinedClickable(
-                                onClick = { onCellClick(type) },
-                                onLongClick = { if (x == null) onCellLongPress() },
-                            ),
+                            .background(if (x != null) FhColors.PrimarySoft else FhColors.ChipGray),
                     ) {
-                        if (x != null) {
+                        if (x == null) {
+                            Text("—", fontSize = FhType.Caption, color = FhColors.Tiny)
+                        } else {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Text(
                                     if (type == "bp") "${x.systolic}/${x.diastolic}" else "${x.glucoseMmol}",
-                                    fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FhColors.Text,
+                                    fontSize = FhType.Label, fontWeight = FontWeight.Bold, color = FhColors.Text,
+                                    maxLines = 1,
                                 )
-                                Text(x.time, fontSize = 9.sp, color = FhColors.Text2)
+                                val details = buildList {
+                                    if (type == "glucose") compactGlucoseScene(x.glucoseContext).takeIf { it.isNotEmpty() }?.let(::add)
+                                    if ((cell?.count ?: 0) > 1) add("${cell?.count}次")
+                                }.joinToString("·")
+                                if (details.isNotEmpty()) {
+                                    Text(
+                                        details, fontSize = FhType.Caption, color = FhColors.Text2,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                             }
-                        } else {
-                            Text("—", fontSize = 12.sp, color = FhColors.Tiny)
                         }
                     }
                 }
             }
         }
+    }
+}
+
+/** 跨午夜后主动刷新“今天”，无需等待 Room 或导航状态变化。 */
+@Composable
+private fun rememberToday() = produceState(initialValue = todayStr()) {
+    while (true) {
+        val now = ZonedDateTime.now()
+        val nextDay = now.toLocalDate().plusDays(1).atStartOfDay(now.zone)
+        delay((Duration.between(now, nextDay).toMillis() + 250L).coerceAtLeast(1_000L))
+        value = todayStr()
     }
 }

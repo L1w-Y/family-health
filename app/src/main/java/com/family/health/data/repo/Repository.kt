@@ -22,6 +22,8 @@ import com.family.health.data.model.IndicatorItem
 import com.family.health.data.model.Measurement
 import com.family.health.data.model.MedChange
 import com.family.health.data.model.MedicationItem
+import com.family.health.data.model.MedicationAdjustment
+import com.family.health.data.projectedMedicationStock
 import com.family.health.data.model.Note
 import com.family.health.data.model.Profile
 import com.family.health.data.model.ReminderSetting
@@ -33,10 +35,12 @@ import com.family.health.syncclient.HttpSyncClient
 import com.family.health.syncclient.ImportResult
 import com.family.health.util.dateTimeToMs
 import com.family.health.util.deviceTzOffsetMin
+import com.family.health.util.deviceTzOffsetMin
 import com.family.health.util.mmDdHmToMs
 import com.family.health.util.msToDate
 import com.family.health.util.msToDateTime
 import com.family.health.util.msToMmDdHm
+import com.family.health.util.tzOffsetMinAt
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -115,6 +119,7 @@ class Repository(
                 meds = meds.filter { it.profileId == p.id }.map { m ->
                     MedicationItem(
                         id = m.id, name = m.name, dosageText = m.dosageText,
+                        doseQty = m.doseQty, doseUnit = m.doseUnit ?: "片", doseTimesPerDay = m.doseTimesPerDay,
                         doseSlots = jsonArrayToStrings(m.doseSlotsJson),
                         medKind = m.medKind, category = m.category,
                         startDate = m.startDate, endDate = m.endDate,
@@ -126,11 +131,9 @@ class Repository(
                 },
                 daily = dailies.filter { it.profileId == p.id }.map { d ->
                     DailyMedItem(
-                        id = d.id, name = d.name, isTcm = d.isTcm, doseText = d.doseText ?: "",
-                        doseSlots = jsonArrayToStrings(d.doseSlotsJson),
-                        stockQty = d.stockQty, stockUnit = d.stockUnit ?: "片", dailyQty = d.dailyQty,
-                        tcmPacks = d.tcmPacks, tcmDaysPerPack = d.tcmDaysPerPack ?: 1,
-                        tcmUsedDays = d.tcmUsedDays ?: 0,
+                        id = d.id, medicationItemId = d.medicationItemId,
+                        stockBySlot = jsonObjectToDoubles(d.stockBySlotJson),
+                        stockCountedAtMs = d.stockCountedAtMs, tzOffsetMin = d.tzOffsetMin,
                     )
                 },
                 events = events.filter { it.profileId == p.id }
@@ -166,7 +169,7 @@ class Repository(
                     },
                 measurements = measurements.filter { it.profileId == p.id }.map { m ->
                     Measurement(
-                        id = m.id, type = m.type, measuredAt = msToDateTime(m.measuredAt),
+                        id = m.id, type = m.type, measuredAt = msToDateTime(m.measuredAt, m.tzOffsetMin),
                         systolic = m.systolic, diastolic = m.diastolic, heartRateBpm = m.heartRateBpm,
                         glucoseMmol = m.glucoseMmol, glucoseContext = m.glucoseContext,
                         note = m.note ?: "", createdBy = signer(m.createdBy),
@@ -187,7 +190,10 @@ class Repository(
                 watchlist = watches.filter { it.profileId == p.id }
                     .sortedBy { it.sortOrder }
                     .map { w ->
-                        WatchItem(w.canonicalName, jsonArrayToStrings(w.aliasesJson), w.canonicalUnit ?: "")
+                        WatchItem(
+                            id = w.id, canonicalName = w.canonicalName,
+                            aliases = jsonArrayToStrings(w.aliasesJson), canonicalUnit = w.canonicalUnit ?: "",
+                        )
                     },
             )
         }
@@ -205,10 +211,11 @@ class Repository(
     suspend fun addMeasurement(profileId: String, m: Measurement) {
         val e = MeasurementEntity(
             id = uuid(), profileId = profileId, type = m.type,
-            measuredAt = dateTimeToMs(m.measuredAt), tzOffsetMin = deviceTzOffsetMin(),
+            measuredAt = dateTimeToMs(m.measuredAt), tzOffsetMin = tzOffsetMinAt(m.measuredAt),
             systolic = m.systolic, diastolic = m.diastolic, heartRateBpm = m.heartRateBpm,
             glucoseMmol = m.glucoseMmol, glucoseContext = m.glucoseContext,
-            note = m.note.ifEmpty { null }, createdBy = session.deviceId, deleted = false, seq = 0,
+            note = m.note.ifEmpty { null }, payloadJson = null,
+            createdBy = session.deviceId, deleted = false, seq = 0,
         )
         val key = uuid()
         db.withTransaction {
@@ -270,8 +277,31 @@ class Repository(
 
     suspend fun saveMed(item: MedicationItem) {
         val old = db.medicationItemDao().byId(item.id) ?: return
+        val now = System.currentTimeMillis()
+        val linkedDaily = db.dailyMedItemDao().byMedicationId(item.id)
+        val oldSlots = jsonArrayToStrings(old.doseSlotsJson)
+        val dosageOrScheduleChanged = old.doseQty != item.doseQty || old.doseUnit != item.doseUnit || oldSlots != item.doseSlots
+        val settledDaily = if (linkedDaily != null && dosageOrScheduleChanged) {
+            val oldItem = DailyMedItem(
+                id = linkedDaily.id,
+                medicationItemId = linkedDaily.medicationItemId,
+                stockBySlot = jsonObjectToDoubles(linkedDaily.stockBySlotJson),
+                stockCountedAtMs = linkedDaily.stockCountedAtMs,
+                tzOffsetMin = linkedDaily.tzOffsetMin,
+            )
+            val projected = projectedMedicationStock(oldItem, old.doseQty ?: 0.0, now)
+            val aligned = item.doseSlots.associateWith { slot ->
+                if (old.doseUnit != item.doseUnit) 0.0 else projected[slot] ?: 0.0
+            }
+            linkedDaily.copy(
+                stockBySlotJson = doublesToJsonObject(aligned),
+                stockCountedAtMs = now,
+                tzOffsetMin = deviceTzOffsetMin(),
+            )
+        } else null
         val e = old.copy(
             name = item.name, dosageText = item.dosageText,
+            doseQty = item.doseQty, doseUnit = item.doseUnit, doseTimesPerDay = item.doseTimesPerDay,
             doseSlotsJson = stringsToJsonArray(item.doseSlots),
             medKind = item.medKind, category = item.category,
             startDate = item.startDate, endDate = item.endDate,
@@ -279,7 +309,10 @@ class Repository(
         val key = uuid()
         db.withTransaction {
             db.medicationItemDao().upsertAll(listOf(e))
-            db.outboxDao().insertAll(outboxOps(key, listOf(Triple("medication_items", "update", medicationItemToRow(e)))))
+            settledDaily?.let { db.dailyMedItemDao().upsertAll(listOf(it)) }
+            val ops = mutableListOf(Triple("medication_items", "update", medicationItemToRow(e)))
+            settledDaily?.let { ops += Triple("daily_med_items", "update", dailyMedItemToRow(it)) }
+            db.outboxDao().insertAll(outboxOps(key, ops))
         }
         engine.kickPush()
     }
@@ -287,7 +320,7 @@ class Repository(
     /** 记用药变化：med_changes 先行（规则 3），被替代条目先写（规则 2），同事务同事务批次一键幂等 */
     suspend fun saveMedChange(
         profileId: String, date: String, note: String, linkedEventId: String?,
-        stops: Set<String>, adjustments: Map<String, Pair<String, Set<String>>>,
+        stops: Set<String>, adjustments: Map<String, MedicationAdjustment>,
         additions: List<MedicationItem>,
     ): Triple<Int, Int, Int> {
         val changeId = uuid()
@@ -295,6 +328,8 @@ class Repository(
         val change = MedChangeEntity(changeId, profileId, date, note.ifEmpty { null }, linkedEventId, false, 0)
         val ops = mutableListOf(Triple("med_changes", "insert", medChangeToRow(change)))
         val medsToUpsert = mutableListOf<MedicationItemEntity>()
+        val dailiesToUpsert = mutableListOf<DailyMedItemEntity>()
+        val now = System.currentTimeMillis()
 
         stops.forEach { id ->
             db.medicationItemDao().byId(id)?.let { old ->
@@ -309,18 +344,41 @@ class Repository(
                 medsToUpsert += ended
                 ops += Triple("medication_items", "update", medicationItemToRow(ended))
                 val next = old.copy(
-                    id = uuid(), dosageText = adj.first.ifBlank { old.dosageText },
-                    doseSlotsJson = if (adj.second.isEmpty()) old.doseSlotsJson else stringsToJsonArray(adj.second.toList()),
+                    id = uuid(), dosageText = adj.dosageText.ifBlank { old.dosageText },
+                    doseQty = adj.doseQtyText.toDoubleOrNull() ?: old.doseQty, doseUnit = adj.doseUnit,
+                    doseTimesPerDay = adj.doseTimesText.toIntOrNull() ?: old.doseTimesPerDay,
+                    doseSlotsJson = if (adj.doseSlots.isEmpty()) old.doseSlotsJson else stringsToJsonArray(adj.doseSlots.toList()),
                     startDate = date, endDate = null, supersedesId = id, changeId = changeId,
                 )
                 medsToUpsert += next
                 ops += Triple("medication_items", "insert", medicationItemToRow(next))
+                db.dailyMedItemDao().byMedicationId(id)?.let { daily ->
+                    val snapshot = DailyMedItem(
+                        id = daily.id, medicationItemId = id,
+                        stockBySlot = jsonObjectToDoubles(daily.stockBySlotJson),
+                        stockCountedAtMs = daily.stockCountedAtMs, tzOffsetMin = daily.tzOffsetMin,
+                    )
+                    val projected = projectedMedicationStock(snapshot, old.doseQty ?: 0.0, now)
+                    val nextSlots = jsonArrayToStrings(next.doseSlotsJson)
+                    val aligned = nextSlots.associateWith { slot ->
+                        if (old.doseUnit != next.doseUnit) 0.0 else projected[slot] ?: 0.0
+                    }
+                    val migrated = daily.copy(
+                        medicationItemId = next.id,
+                        stockBySlotJson = doublesToJsonObject(aligned),
+                        stockCountedAtMs = now, tzOffsetMin = deviceTzOffsetMin(),
+                    )
+                    dailiesToUpsert += migrated
+                    ops += Triple("daily_med_items", "update", dailyMedItemToRow(migrated))
+                }
             }
         }
         additions.filter { it.name.isNotBlank() }.forEach { n ->
             val e = MedicationItemEntity(
                 id = uuid(), profileId = profileId, category = n.category, medKind = n.medKind,
-                name = n.name, dosageText = n.dosageText, doseSlotsJson = stringsToJsonArray(n.doseSlots),
+                name = n.name, dosageText = n.dosageText, doseQty = n.doseQty, doseUnit = n.doseUnit,
+                doseTimesPerDay = n.doseTimesPerDay,
+                doseSlotsJson = stringsToJsonArray(n.doseSlots),
                 startDate = date, endDate = null, supersedesId = null, changeId = changeId,
                 deleted = false, seq = 0,
             )
@@ -331,6 +389,7 @@ class Repository(
         db.withTransaction {
             db.medChangeDao().upsertAll(listOf(change))
             db.medicationItemDao().upsertAll(medsToUpsert)
+            db.dailyMedItemDao().upsertAll(dailiesToUpsert)
             db.outboxDao().insertAll(outboxOps(key, ops))
         }
         engine.kickPush()
@@ -340,11 +399,10 @@ class Repository(
     suspend fun upsertDaily(profileId: String, item: DailyMedItem) {
         val exists = db.dailyMedItemDao().byId(item.id) != null
         val e = DailyMedItemEntity(
-            id = item.id, profileId = profileId, isTcm = item.isTcm, name = item.name,
-            doseText = item.doseText, doseSlotsJson = stringsToJsonArray(item.doseSlots),
-            stockQty = item.stockQty, stockUnit = item.stockUnit, dailyQty = item.dailyQty,
-            tcmPacks = item.tcmPacks, tcmDaysPerPack = item.tcmDaysPerPack,
-            tcmUsedDays = item.tcmUsedDays, deleted = false, seq = 0,
+            id = item.id, profileId = profileId, medicationItemId = item.medicationItemId,
+            stockBySlotJson = doublesToJsonObject(item.stockBySlot),
+            stockCountedAtMs = item.stockCountedAtMs, tzOffsetMin = item.tzOffsetMin,
+            deleted = false, seq = 0,
         )
         val key = uuid()
         db.withTransaction {
@@ -417,6 +475,17 @@ class Repository(
         engine.kickPush()
     }
 
+    /** 移除重点指标（watch_items 为可改表：本地软删 + 墓碑上行，02 §4.3） */
+    suspend fun removeWatch(watchId: String) {
+        val old = db.watchItemDao().byId(watchId) ?: return
+        val key = uuid()
+        db.withTransaction {
+            db.watchItemDao().upsertAll(listOf(old.copy(deleted = true)))
+            db.outboxDao().insertAll(outboxOps(key, listOf(Triple("watch_items", "delete", tombstoneRow(watchId)))))
+        }
+        engine.kickPush()
+    }
+
     suspend fun addReminderTime(memberId: String, kind: String, time: String = "12:00") {
         val type = if (kind == "med") "medication" else "measure"
         val rows = db.reminderDao().byProfile(memberId)
@@ -459,6 +528,18 @@ class Repository(
     suspend fun updateNextCheckupDate(eventId: String, nextDate: String) {
         val old = db.checkupEventDao().byId(eventId) ?: return
         val e = old.copy(nextCheckupDate = nextDate)
+        val key = uuid()
+        db.withTransaction {
+            db.checkupEventDao().upsertAll(listOf(e))
+            db.outboxDao().insertAll(outboxOps(key, listOf(Triple("checkup_events", "update", checkupEventToRow(e)))))
+        }
+        engine.kickPush()
+    }
+
+    /** 修改复查事件备注（02 §4.3：checkup_events 可改，整行 LWW；清空 → note=null 同步置空） */
+    suspend fun updateCheckupNote(eventId: String, note: String) {
+        val old = db.checkupEventDao().byId(eventId) ?: return
+        val e = old.copy(note = note.ifBlank { null })
         val key = uuid()
         db.withTransaction {
             db.checkupEventDao().upsertAll(listOf(e))

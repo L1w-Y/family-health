@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS medication_items (
   category TEXT NOT NULL DEFAULT 'long_term' CHECK (category IN ('long_term','temporary')),
   med_kind TEXT NOT NULL DEFAULT 'western' CHECK (med_kind IN ('western','tcm')),
   name TEXT NOT NULL, dosage_text TEXT NOT NULL DEFAULT '',
+  dose_qty NUMERIC, dose_unit TEXT, dose_times_per_day SMALLINT,
   dose_slots JSONB, start_date DATE NOT NULL, end_date DATE,
   supersedes_id TEXT, change_id TEXT
 );
@@ -175,12 +176,12 @@ CREATE TABLE IF NOT EXISTS daily_med_items (
   id TEXT PRIMARY KEY, family_id TEXT NOT NULL, created_by TEXT NOT NULL,
   source TEXT NOT NULL, created_at BIGINT NOT NULL, updated_at BIGINT NOT NULL,
   deleted BOOLEAN NOT NULL DEFAULT false, seq BIGINT NOT NULL,
-  profile_id TEXT NOT NULL, is_tcm BOOLEAN NOT NULL DEFAULT false,
-  name TEXT NOT NULL, dose_text TEXT, dose_slots JSONB,
-  stock_qty NUMERIC, stock_unit TEXT, daily_qty NUMERIC,
-  tcm_packs NUMERIC, tcm_days_per_pack INT, tcm_used_days INT
+  profile_id TEXT NOT NULL, medication_item_id TEXT NOT NULL,
+  stock_by_slot JSONB NOT NULL DEFAULT '{}',
+  stock_counted_at BIGINT NOT NULL, tz_offset_min INT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_daily_med_items_profile ON daily_med_items(family_id, profile_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_daily_med_items_medication ON daily_med_items(family_id, profile_id, medication_item_id) WHERE deleted = false;
 CREATE INDEX IF NOT EXISTS idx_daily_med_items_seq ON daily_med_items(seq);
 
 -- 03 §1 原则 2：导入幂等（同 import_id 重放返回首次结果）

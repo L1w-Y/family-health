@@ -51,6 +51,9 @@ data class MedicationItem(
     val id: String,
     val name: String,
     val dosageText: String,
+    val doseQty: Double? = null,
+    val doseUnit: String = "片",
+    val doseTimesPerDay: Int? = null,
     val doseSlots: List<String> = emptyList(), // morning/noon/evening/bedtime
     val medKind: String = "western", // western | tcm
     val category: String = "long_term", // long_term | temporary
@@ -68,26 +71,32 @@ data class MedChange(
     val linkedEventId: String? = null,
 )
 
-/** 今日用药条目（执行层，与方案无外键关联）。契约 §3.15 */
+/** 今日用药条目（执行层，关联方案并只保存分时段盘点事实）。契约 §3.15 */
 data class DailyMedItem(
     val id: String,
-    val name: String,
-    val isTcm: Boolean = false,
-    val doseText: String = "",
-    val doseSlots: List<String> = emptyList(),
-    val stockQty: Double? = null,
-    val stockUnit: String = "片",
-    val dailyQty: Double? = null,
-    val tcmPacks: Double? = null,
-    val tcmDaysPerPack: Int = 1,
-    val tcmUsedDays: Int = 0,
-) {
-    /** 余量 ÷ 每日用量，纯算术展示（契约 §3.15） */
-    val daysLeft: Int?
-        get() = if (stockQty != null && dailyQty != null && dailyQty!! > 0) {
-            kotlin.math.floor(stockQty!! / dailyQty!!).toInt()
-        } else null
-}
+    val medicationItemId: String,
+    val stockBySlot: Map<String, Double> = emptyMap(),
+    val stockCountedAtMs: Long,
+    val tzOffsetMin: Int,
+)
+
+data class MedicationAdjustment(
+    val dosageText: String,
+    val doseQtyText: String,
+    val doseUnit: String,
+    val doseTimesText: String,
+    val doseSlots: Set<String>,
+)
+
+val MedicationItem.dosageLabel: String
+    get() = if (medKind == "western" && doseQty != null) {
+        val quantity = if (doseQty == kotlin.math.floor(doseQty)) doseQty.toLong().toString() else doseQty.toString()
+        val times = doseTimesPerDay?.toString() ?: "—"
+        "一次 $quantity$doseUnit · 一天 $times 次"
+    } else dosageText
+
+fun doseTimesMatchSlots(times: Int?, slots: Collection<String>): Boolean =
+    (times ?: 0) in 1..4 && times == slots.size
 
 /** 测量记录（追加型；心率是血压附属项，不单列类型）。契约 §3.4 */
 data class Measurement(
@@ -120,8 +129,9 @@ data class Note(
 
 /** 重点指标清单（别名归并）。契约 §3.8 */
 data class WatchItem(
+    val id: String = "",
     val canonicalName: String,
-    val aliases: List<String>,
+    val aliases: List<String> = emptyList(),
     val canonicalUnit: String = "",
 )
 

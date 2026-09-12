@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.family.health.data.AppViewModel
 import com.family.health.data.model.Labels
+import com.family.health.data.model.doseTimesMatchSlots
 import com.family.health.ui.components.FChip
 import com.family.health.ui.components.FhButton
 import com.family.health.ui.components.FhTextField
@@ -31,11 +33,16 @@ fun MedEditScreen(vm: AppViewModel, nav: NavHostController, medId: String) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val med = ui.currentMember.meds.firstOrNull { it.id == medId }
     if (med == null) {
-        PageTitle("编辑用药", onBack = { nav.popBackStack() })
+        PageTitle(form = true, title = "编辑用药", onBack = { nav.popBackStack() })
         return
     }
     var name by remember { mutableStateOf(med.name) }
     var dosage by remember { mutableStateOf(med.dosageText) }
+    var doseQty by remember {
+        mutableStateOf(med.doseQty?.let { if (it == kotlin.math.floor(it)) it.toLong().toString() else it.toString() } ?: "")
+    }
+    var doseUnit by remember { mutableStateOf(med.doseUnit) }
+    var doseTimes by remember { mutableStateOf(med.doseTimesPerDay?.toString() ?: "") }
     var kind by remember { mutableStateOf(med.medKind) }
     var cat by remember { mutableStateOf(med.category) }
     var slots by remember { mutableStateOf(med.doseSlots.toSet()) }
@@ -43,9 +50,16 @@ fun MedEditScreen(vm: AppViewModel, nav: NavHostController, medId: String) {
     var end by remember { mutableStateOf(med.endDate ?: "") }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        PageTitle("编辑用药", onBack = { nav.popBackStack() })
-        FhTextField(name, { name = it }, "名称")
-        FhTextField(dosage, { dosage = it }, "用法用量")
+        FhTextField(name, { name = it }, "")
+        if (kind == "western") {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FhTextField(doseQty, { doseQty = it }, "每次数量", Modifier.weight(1f), decimal = true)
+                FhTextField(doseUnit, { doseUnit = it }, "单位", Modifier.weight(1f))
+                FhTextField(doseTimes, { doseTimes = it.filter(Char::isDigit) }, "一天次数", Modifier.weight(1f))
+            }
+        } else {
+            FhTextField(dosage, { dosage = it }, "详细用法")
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Column(Modifier.weight(1f)) {
                 FieldLabel("类别")
@@ -70,14 +84,27 @@ fun MedEditScreen(vm: AppViewModel, nav: NavHostController, medId: String) {
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FhTextField(start, { start = it }, "开始日期", Modifier.weight(1f), placeholder = "2026-08-15")
+            FhTextField(start, { start = it }, "开始日期", Modifier.weight(1f))
             FhTextField(end, { end = it }, "结束日期（空=进行中）", Modifier.weight(1f))
         }
         FhButton("保 存", onClick = {
+            val parsedDose = doseQty.toDoubleOrNull()
+            val parsedTimes = doseTimes.toIntOrNull()
+            if (kind == "western" && (parsedDose == null || parsedDose <= 0 || doseUnit.isBlank() || parsedTimes == null || parsedTimes !in 1..4 || slots.isEmpty())) {
+                vm.toast("请填写每次数量、单位、一天次数和服用时段")
+                return@FhButton
+            }
+            if (kind == "western" && !doseTimesMatchSlots(parsedTimes, slots)) {
+                vm.toast("一天 $parsedTimes 次与已选 ${slots.size} 个服用时段不一致")
+                return@FhButton
+            }
             vm.saveMed(
                 med.copy(
                     name = name.ifBlank { med.name },
-                    dosageText = dosage,
+                    dosageText = if (kind == "tcm") dosage else "",
+                    doseQty = if (kind == "western") parsedDose else null,
+                    doseUnit = if (kind == "western") doseUnit.trim() else med.doseUnit,
+                    doseTimesPerDay = if (kind == "western") parsedTimes else null,
                     medKind = kind,
                     category = cat,
                     doseSlots = Labels.SLOTS.map { it.first }.filter { it in slots },

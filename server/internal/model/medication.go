@@ -33,7 +33,10 @@ type MedicationItem struct {
 	Category     MedCategory `json:"category" db:"category"`
 	Kind         MedKind     `json:"med_kind" db:"med_kind"`
 	Name         string      `json:"name" db:"name"`
-	DosageText   string      `json:"dosage_text" db:"dosage_text"`         // 中药在此写详细（剂数、煎服法）
+	DosageText   string      `json:"dosage_text" db:"dosage_text"`     // 中药在此写详细（剂数、煎服法）
+	DoseQty      *float64    `json:"dose_qty,omitempty" db:"dose_qty"` // 西药：每个时段的一次用量
+	DoseUnit     string      `json:"dose_unit,omitempty" db:"dose_unit"`
+	DoseTimes    *int        `json:"dose_times_per_day,omitempty" db:"dose_times_per_day"`
 	DoseSlots    []string    `json:"dose_slots,omitempty" db:"dose_slots"` // jsonb text[]
 	StartDate    string      `json:"start_date" db:"start_date"`
 	EndDate      *string     `json:"end_date,omitempty" db:"end_date"`
@@ -50,18 +53,12 @@ type MedChange struct {
 	LinkedEventID *string `json:"linked_event_id,omitempty" db:"linked_event_id"`
 }
 
-// DailyMedItem 今日用药清单（执行层，与方案无外键关联）
+// DailyMedItem 今日用药清单（执行层，关联方案并保存药格盘点事实）
 type DailyMedItem struct {
 	Base
-	ProfileID      string   `json:"profile_id" db:"profile_id"`
-	IsTCM          bool     `json:"is_tcm" db:"is_tcm"`
-	Name           string   `json:"name" db:"name"`
-	DoseText       string   `json:"dose_text,omitempty" db:"dose_text"`   // 西药：每次用量
-	DoseSlots      []string `json:"dose_slots,omitempty" db:"dose_slots"` // 西药：时段
-	StockQty       *float64 `json:"stock_qty,omitempty" db:"stock_qty"`
-	StockUnit      string   `json:"stock_unit,omitempty" db:"stock_unit"`
-	DailyQty       *float64 `json:"daily_qty,omitempty" db:"daily_qty"` // 西药：可服天数 = stock/daily
-	TCMPacks       *float64 `json:"tcm_packs,omitempty" db:"tcm_packs"`
-	TCMDaysPerPack *int     `json:"tcm_days_per_pack,omitempty" db:"tcm_days_per_pack"`
-	TCMUsedDays    *int     `json:"tcm_used_days,omitempty" db:"tcm_used_days"`
+	ProfileID        string             `json:"profile_id" db:"profile_id"`
+	MedicationItemID string             `json:"medication_item_id" db:"medication_item_id"`
+	StockBySlot      map[string]float64 `json:"stock_by_slot" db:"stock_by_slot"`
+	StockCountedAt   int64              `json:"stock_counted_at" db:"stock_counted_at"`
+	TZOffsetMin      int                `json:"tz_offset_min" db:"tz_offset_min"`
 }

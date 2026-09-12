@@ -108,7 +108,7 @@ func normalizeValue(v any) any {
 		if err != nil {
 			return nil
 		}
-		return f
+		return f.Float64
 	default:
 		return v
 	}

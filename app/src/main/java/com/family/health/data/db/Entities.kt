@@ -2,6 +2,7 @@
 package com.family.health.data.db
 
 import androidx.room.Entity
+import androidx.room.Index
 import androidx.room.PrimaryKey
 
 @Entity(tableName = "devices")
@@ -38,6 +39,7 @@ data class MeasurementEntity(
     val glucoseMmol: Double?,
     val glucoseContext: String?,
     val note: String?,
+    val payloadJson: String?, // 服务端 payload（jsonb 原文，预留给二期测量类型）
     val createdBy: String, // 设备 id，展示时映射署名
     val deleted: Boolean,
     val seq: Long,
@@ -104,6 +106,9 @@ data class MedicationItemEntity(
     val medKind: String,
     val name: String,
     val dosageText: String,
+    val doseQty: Double?,
+    val doseUnit: String?,
+    val doseTimesPerDay: Int?,
     val doseSlotsJson: String?, // jsonb 原文（数组）
     val startDate: String,
     val endDate: String?,
@@ -164,20 +169,14 @@ data class NoteEntity(
     val seq: Long,
 )
 
-@Entity(tableName = "daily_med_items")
+@Entity(tableName = "daily_med_items", indices = [Index(value = ["medicationItemId"])])
 data class DailyMedItemEntity(
     @PrimaryKey val id: String,
     val profileId: String,
-    val isTcm: Boolean,
-    val name: String,
-    val doseText: String?,
-    val doseSlotsJson: String?,
-    val stockQty: Double?,
-    val stockUnit: String?,
-    val dailyQty: Double?,
-    val tcmPacks: Double?,
-    val tcmDaysPerPack: Int?,
-    val tcmUsedDays: Int?,
+    val medicationItemId: String,
+    val stockBySlotJson: String,
+    val stockCountedAtMs: Long,
+    val tzOffsetMin: Int,
     val deleted: Boolean,
     val seq: Long,
 )

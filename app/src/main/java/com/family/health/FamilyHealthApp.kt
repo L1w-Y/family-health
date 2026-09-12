@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import com.family.health.data.db.AppDatabase
 import com.family.health.data.repo.Repository
-import com.family.health.data.session.DailyChecks
 import com.family.health.data.session.SessionStore
 import com.family.health.data.sync.SyncEngine
 import com.family.health.notif.NotificationHelper
@@ -18,7 +17,6 @@ class AppContainer(context: Context) {
     val client = HttpSyncClient()
     val engine = SyncEngine(db, session, client)
     val repo = Repository(db, session, engine, client)
-    val dailyChecks = DailyChecks(context)
     val reminderScheduler = ReminderScheduler(context)
 
     init {

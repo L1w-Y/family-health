@@ -23,7 +23,7 @@ type tableMeta struct {
 
 // tables 同步上行白名单即本 map 的键集合。
 // 可改表集合 = 02 §4.3 明示的 profiles/medication_items/reminders/watch_items，
-// 另含 notes（done 勾选）与 daily_med_items（余量手填更新）——两处均依赖整行覆盖才能成立，
+// 另含 notes（done 勾选）与 daily_med_items（分药格盘点量更新）——两处均依赖整行覆盖才能成立，
 // 与 §4.3 的 LWW 语义一致，已在 README「实现决策」记录。
 var tables = map[string]tableMeta{
 	"profiles": {
@@ -58,7 +58,7 @@ var tables = map[string]tableMeta{
 	},
 	"medication_items": {
 		kind: KindMutable,
-		bizCols: []string{"profile_id", "category", "med_kind", "name", "dosage_text",
+		bizCols: []string{"profile_id", "category", "med_kind", "name", "dosage_text", "dose_qty", "dose_unit", "dose_times_per_day",
 			"dose_slots", "start_date", "end_date", "supersedes_id", "change_id"},
 		jsonbCol: map[string]bool{"dose_slots": true},
 	},
@@ -77,10 +77,9 @@ var tables = map[string]tableMeta{
 		jsonbCol: map[string]bool{"remind_targets": true},
 	},
 	"daily_med_items": {
-		kind: KindMutable,
-		bizCols: []string{"profile_id", "is_tcm", "name", "dose_text", "dose_slots",
-			"stock_qty", "stock_unit", "daily_qty", "tcm_packs", "tcm_days_per_pack", "tcm_used_days"},
-		jsonbCol: map[string]bool{"dose_slots": true},
+		kind:     KindMutable,
+		bizCols:  []string{"profile_id", "medication_item_id", "stock_by_slot", "stock_counted_at", "tz_offset_min"},
+		jsonbCol: map[string]bool{"stock_by_slot": true},
 	},
 	"attachments": {
 		kind:    KindAppendOnly,

@@ -1,6 +1,8 @@
 // 服务器与账号：当前连接信息、同步状态、家庭名编辑、重新配置（契约：docs/05 §9 我的）
 package com.family.health.feature.mine
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -42,9 +44,9 @@ fun AccountScreen(vm: AppViewModel, nav: NavHostController) {
         PageSub("连接与同步状态")
 
         FhCard {
-            KvRow("服务器") { Text(session.server, fontSize = 14.sp, color = FhColors.Text) }
-            KvRow("本机署名") { Text(session.deviceName, fontSize = 14.sp, color = FhColors.Text) }
-            KvRow("家庭 ID") { Text(session.familyId, fontSize = 14.sp, color = FhColors.Text) }
+            KvRow("服务器") { Text(session.server, fontSize = FhType.Label, color = FhColors.Text) }
+            KvRow("本机署名") { Text(session.deviceName, fontSize = FhType.Label, color = FhColors.Text) }
+            KvRow("家庭 ID") { Text(session.familyId, fontSize = FhType.Label, color = FhColors.Text) }
             KvRow("同步") {
                 Text(
                     when {
@@ -52,12 +54,12 @@ fun AccountScreen(vm: AppViewModel, nav: NavHostController) {
                         pending > 0 -> "待上行 $pending 条"
                         else -> "已是最新"
                     },
-                    fontSize = 14.sp,
+                    fontSize = FhType.Label,
                     color = if (pending > 0) FhColors.Amber else FhColors.Text,
                 )
             }
             syncError?.let {
-                Text("最近同步错误：$it", fontSize = 12.sp, color = FhColors.Amber,
+                Text("最近同步错误：$it", fontSize = FhType.Caption, color = FhColors.Amber,
                     lineHeight = 18.sp, modifier = Modifier.padding(top = 6.dp))
             }
         }

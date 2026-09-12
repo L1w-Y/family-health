@@ -60,6 +60,22 @@ func checkStartItem(s *StartItem, p string, es *errors) {
 	if s.Name == "" {
 		es.add(p+".name", CodeRequired, "name 必填")
 	}
+	structuredDose := s.DoseQty != nil || s.DoseUnit != "" || s.DoseTimes != nil
+	if s.DoseQty != nil && *s.DoseQty <= 0 {
+		es.add(p+".dose_qty", CodeValueRange, "dose_qty 须大于 0")
+	}
+	if structuredDose && s.DoseQty == nil {
+		es.add(p+".dose_qty", CodeRequired, "结构化用量须提供 dose_qty")
+	}
+	if structuredDose && s.DoseUnit == "" {
+		es.add(p+".dose_unit", CodeRequired, "结构化用量须提供 dose_unit")
+	}
+	if structuredDose && s.DoseTimes == nil {
+		es.add(p+".dose_times_per_day", CodeRequired, "结构化用量须提供 dose_times_per_day")
+	}
+	if s.DoseTimes != nil && (*s.DoseTimes < 1 || *s.DoseTimes > 4) {
+		es.add(p+".dose_times_per_day", CodeValueRange, "dose_times_per_day 须为 1–4")
+	}
 	seen := map[string]bool{}
 	for j, slot := range s.DoseSlots {
 		if !doseSlotSet[slot] {
@@ -68,6 +84,9 @@ func checkStartItem(s *StartItem, p string, es *errors) {
 			es.add(fmt.Sprintf("%s.dose_slots[%d]", p, j), CodeSchema, "dose_slots 不允许重复")
 		}
 		seen[slot] = true
+	}
+	if s.DoseTimes != nil && *s.DoseTimes != len(s.DoseSlots) {
+		es.add(p+".dose_times_per_day", CodeSchema, "一天次数必须与 dose_slots 数量一致")
 	}
 	startOK := true
 	if s.StartDate != "" {

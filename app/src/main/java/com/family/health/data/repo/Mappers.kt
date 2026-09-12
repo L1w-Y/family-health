@@ -17,12 +17,15 @@ import com.family.health.data.db.WatchItemEntity
 import com.family.health.syncclient.ChangeRow
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.long
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
@@ -56,7 +59,8 @@ fun ChangeRow.toEntity(): Any = when (table) {
         systolic = row.intOrNull("systolic"), diastolic = row.intOrNull("diastolic"),
         heartRateBpm = row.intOrNull("heart_rate_bpm"),
         glucoseMmol = row.dblOrNull("glucose_mmol"), glucoseContext = row.strOrNull("glucose_context"),
-        note = row.strOrNull("note"), createdBy = row.str("created_by"),
+        note = row.strOrNull("note"), payloadJson = row.rawOrNull("payload"),
+        createdBy = row.str("created_by"),
         deleted = row.boolOr("deleted"), seq = row.longOr("seq"),
     )
     "checkup_events" -> CheckupEventEntity(
@@ -86,6 +90,8 @@ fun ChangeRow.toEntity(): Any = when (table) {
     "medication_items" -> MedicationItemEntity(
         id = row.str("id"), profileId = row.str("profile_id"), category = row.str("category"),
         medKind = row.str("med_kind"), name = row.str("name"), dosageText = row.str("dosage_text"),
+        doseQty = row.dblOrNull("dose_qty"), doseUnit = row.strOrNull("dose_unit"),
+        doseTimesPerDay = row.intOrNull("dose_times_per_day"),
         doseSlotsJson = row.rawOrNull("dose_slots"), startDate = row.str("start_date"),
         endDate = row.strOrNull("end_date"), supersedesId = row.strOrNull("supersedes_id"),
         changeId = row.strOrNull("change_id"), deleted = row.boolOr("deleted"), seq = row.longOr("seq"),
@@ -114,12 +120,12 @@ fun ChangeRow.toEntity(): Any = when (table) {
         deleted = row.boolOr("deleted"), seq = row.longOr("seq"),
     )
     "daily_med_items" -> DailyMedItemEntity(
-        id = row.str("id"), profileId = row.str("profile_id"), isTcm = row.boolOr("is_tcm"),
-        name = row.str("name"), doseText = row.strOrNull("dose_text"),
-        doseSlotsJson = row.rawOrNull("dose_slots"), stockQty = row.dblOrNull("stock_qty"),
-        stockUnit = row.strOrNull("stock_unit"), dailyQty = row.dblOrNull("daily_qty"),
-        tcmPacks = row.dblOrNull("tcm_packs"), tcmDaysPerPack = row.intOrNull("tcm_days_per_pack"),
-        tcmUsedDays = row.intOrNull("tcm_used_days"), deleted = row.boolOr("deleted"), seq = row.longOr("seq"),
+        id = row.str("id"), profileId = row.str("profile_id"),
+        medicationItemId = row.str("medication_item_id"),
+        stockBySlotJson = row.rawOrNull("stock_by_slot") ?: "{}",
+        stockCountedAtMs = row.longOr("stock_counted_at"),
+        tzOffsetMin = row.intOrNull("tz_offset_min") ?: 0,
+        deleted = row.boolOr("deleted"), seq = row.longOr("seq"),
     )
     else -> throw IllegalArgumentException("未知同步表：$table")
 }
@@ -156,11 +162,14 @@ fun measurementToRow(e: MeasurementEntity): JsonObject = kotlinx.serialization.j
     putIfNotNull(this, "heart_rate_bpm", e.heartRateBpm)
     putIfNotNull(this, "glucose_mmol", e.glucoseMmol); putIfNotNull(this, "glucose_context", e.glucoseContext)
     putIfNotNull(this, "note", e.note)
+    putRaw(this, "payload", e.payloadJson)
 }
 
 fun medicationItemToRow(e: MedicationItemEntity): JsonObject = kotlinx.serialization.json.buildJsonObject {
     put("id", e.id); put("profile_id", e.profileId); put("category", e.category)
     put("med_kind", e.medKind); put("name", e.name); put("dosage_text", e.dosageText)
+    putIfNotNull(this, "dose_qty", e.doseQty); putIfNotNull(this, "dose_unit", e.doseUnit)
+    putIfNotNull(this, "dose_times_per_day", e.doseTimesPerDay)
     putRaw(this, "dose_slots", e.doseSlotsJson)
     put("start_date", e.startDate)
     putIfNotNull(this, "end_date", e.endDate); putIfNotNull(this, "supersedes_id", e.supersedesId)
@@ -198,11 +207,9 @@ fun noteToRow(e: NoteEntity): JsonObject = kotlinx.serialization.json.buildJsonO
 }
 
 fun dailyMedItemToRow(e: DailyMedItemEntity): JsonObject = kotlinx.serialization.json.buildJsonObject {
-    put("id", e.id); put("profile_id", e.profileId); put("is_tcm", e.isTcm); put("name", e.name)
-    putIfNotNull(this, "dose_text", e.doseText); putRaw(this, "dose_slots", e.doseSlotsJson)
-    putIfNotNull(this, "stock_qty", e.stockQty); putIfNotNull(this, "stock_unit", e.stockUnit)
-    putIfNotNull(this, "daily_qty", e.dailyQty); putIfNotNull(this, "tcm_packs", e.tcmPacks)
-    putIfNotNull(this, "tcm_days_per_pack", e.tcmDaysPerPack); putIfNotNull(this, "tcm_used_days", e.tcmUsedDays)
+    put("id", e.id); put("profile_id", e.profileId); put("medication_item_id", e.medicationItemId)
+    putRaw(this, "stock_by_slot", e.stockBySlotJson)
+    put("stock_counted_at", e.stockCountedAtMs); put("tz_offset_min", e.tzOffsetMin)
 }
 
 /** 墓碑行（软删仅需 id） */
@@ -218,6 +225,16 @@ fun jsonArrayToStrings(raw: String?): List<String> {
             ?.map { el -> el.jsonPrimitive.content } ?: emptyList()
     }.getOrDefault(emptyList())
 }
+
+fun jsonObjectToDoubles(raw: String?): Map<String, Double> = runCatching {
+    if (raw.isNullOrBlank()) emptyMap() else Json.parseToJsonElement(raw).jsonObject.mapNotNull { (key, value) ->
+        value.jsonPrimitive.doubleOrNull?.let { key to it }
+    }.toMap()
+}.getOrDefault(emptyMap())
+
+fun doublesToJsonObject(values: Map<String, Double>): String = buildJsonObject {
+    values.forEach { (key, value) -> put(key, value) }
+}.toString()
 
 fun jsonArrayToInts(raw: String?): List<Int> {
     if (raw.isNullOrBlank()) return emptyList()

@@ -62,7 +62,7 @@ scripts/     schema.sql 建表脚本、smoke.ps1 端到端验证、fixtures/ 测
 ## 实现决策记录（契约未明示处，供评审）
 
 1. **可改表集合**：02 §4.3 明示 profiles/medication_items/reminders/watch_items；
-   实现另含 `notes`（done 勾选）与 `daily_med_items`（余量手填），二者业务上必然可改，
+   实现另含 `notes`（done 勾选）与 `daily_med_items`（分药格盘点量），二者业务上必然可改，
    语义与 §4.3 整行 LWW 一致。`med_changes` 允许 update（批次备注修正）；
    `checkup_events` 允许 update（下次复查日期改期/备注修正，2026-09-08 补充，契约已同步）。
 2. **medication_changes_note 落库**：02 §3.5 已设专列，03 §3 的展示性备注原样落列。
@@ -105,6 +105,9 @@ ssh <user>@<服务器IP> "chmod +x ~/family-health/build/*/main && cd ~/family-h
 
 # 4. 初始化数据库（建表 + 家庭行；重置为干净态用 bash deploy/server-reset.sh）
 ssh <user>@<服务器IP> "cd ~/family-health/deploy && docker compose exec -T pg psql -U postgres -d familyhealth -f /scripts/schema.sql && docker compose exec -T pg psql -U postgres -d familyhealth -f /scripts/init-family.sql"
+
+# 已有数据库升级结构化用量/分药格库存（会按产品决定清空旧 daily_med_items）
+ssh <user>@<服务器IP> "cd ~/family-health/deploy && docker compose exec -T pg psql -U postgres -d familyhealth -f /scripts/migrate-medication-stock-v2.sql"
 
 # 5. 全链路冒烟（HTTP 验证期直接打 IP）
 ./scripts/smoke.ps1 -BaseUrl 'http://<服务器IP>' -FamilySecret '<家庭口令>'

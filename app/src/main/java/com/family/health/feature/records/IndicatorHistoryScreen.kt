@@ -1,6 +1,8 @@
 // 契约：docs/05-页面结构与交互.md §4.1 指标历史页（紧凑数值、无折线、仅 1 次时提示加入重点清单）
 package com.family.health.feature.records
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -47,11 +49,11 @@ fun IndicatorHistoryScreen(vm: AppViewModel, nav: NavHostController, name: Strin
             WarnBox {
                 Text(
                     "仅匹配到 1 次记录。若其他报告中该指标用了不同名称（如 ACR 与 ACR(尿)），加入重点清单并配置别名后可合并历史。",
-                    fontSize = 13.sp, color = FhColors.Amber, lineHeight = 21.sp,
+                    fontSize = FhType.Label, color = FhColors.Amber, lineHeight = 21.sp,
                 )
                 Text(
                     "＋ 加入重点清单",
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold, color = FhColors.Amber,
+                    fontSize = FhType.Label, fontWeight = FontWeight.Bold, color = FhColors.Amber,
                     modifier = Modifier
                         .clickable {
                             vm.addWatch(name)
@@ -71,13 +73,13 @@ fun IndicatorHistoryScreen(vm: AppViewModel, nav: NavHostController, name: Strin
                         modifier = Modifier.fillMaxWidth().padding(vertical = 7.dp),
                     ) {
                         Row(verticalAlignment = Alignment.Bottom) {
-                            Text(p.displayValue, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = FhColors.Text)
+                            Text(p.displayValue, fontSize = FhType.Body, fontWeight = FontWeight.Bold, color = FhColors.Text)
                             if (p.unit.isNotEmpty()) {
-                                Text(" ${p.unit}", fontSize = 11.sp, color = FhColors.Text2)
+                                Text(" ${p.unit}", fontSize = FhType.Caption, color = FhColors.Text2)
                             }
                         }
                         Spacer(Modifier.weight(1f))
-                        Text("${p.date} · ${p.department}", fontSize = 11.sp, color = FhColors.Text2)
+                        Text("${p.date} · ${p.department}", fontSize = FhType.Caption, color = FhColors.Text2)
                     }
                 }
             }

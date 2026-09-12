@@ -10,6 +10,7 @@ import com.family.health.data.model.DailyMedItem
 import com.family.health.data.model.Device
 import com.family.health.data.model.Measurement
 import com.family.health.data.model.MedicationItem
+import com.family.health.data.model.MedicationAdjustment
 import com.family.health.data.model.Note
 import com.family.health.data.model.Profile
 import com.family.health.data.model.ReminderSetting
@@ -30,6 +31,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import java.util.UUID
 
 data class ToastMsg(val id: Long, val text: String)
@@ -50,9 +52,9 @@ data class AppUiState(
     // —— 页面 UI 偏好（对应 prototype state） ——
     val recordsSeg: String = "checkup", // checkup | measure
     val measureType: String = "bp", // bp | glucose
-    val measurePeriod: MeasurePeriod = MeasurePeriod.Month(todayStr().substring(0, 7)),
+    val measurementGranularity: MeasurementGranularity = MeasurementGranularity.Month,
+    val measurementAnchor: String? = null,
     val trendsTableMode: Boolean = true,
-    val trendDays: Int = 30,
     val lastGlucoseCtx: String = "fasting",
 ) {
     /** 空成员安全：未配置/空家庭时给占位档案，页面走空态分支 */
@@ -95,9 +97,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private data class Prefs(
         val recordsSeg: String = "checkup",
         val measureType: String = "bp",
-        val measurePeriod: MeasurePeriod = MeasurePeriod.Month(todayStr().substring(0, 7)),
+        val measurementGranularity: MeasurementGranularity = MeasurementGranularity.Month,
+        val measurementAnchor: String? = null, // ISO 本地日期；null = 今天
         val trendsTableMode: Boolean = true,
-        val trendDays: Int = 30,
         val lastGlucoseCtx: String = "fasting",
     )
 
@@ -123,9 +125,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             toast = arr[4] as ToastMsg?,
             recordsSeg = p.recordsSeg,
             measureType = p.measureType,
-            measurePeriod = p.measurePeriod,
+            measurementGranularity = p.measurementGranularity,
+            measurementAnchor = p.measurementAnchor,
             trendsTableMode = p.trendsTableMode,
-            trendDays = p.trendDays,
             lastGlucoseCtx = p.lastGlucoseCtx,
         )
     }.stateInUi(AppUiState("", emptyList(), emptyList(), "", emptyMap()))
@@ -145,9 +147,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
     fun setRecordsSeg(seg: String) = _prefs.update { it.copy(recordsSeg = seg) }
     fun setMeasureType(type: String) = _prefs.update { it.copy(measureType = type) }
-    fun setMeasurePeriod(period: MeasurePeriod) = _prefs.update { it.copy(measurePeriod = period) }
+    fun setMeasurementGranularity(g: MeasurementGranularity) = _prefs.update { it.copy(measurementGranularity = g) }
+    fun setMeasurementAnchor(date: LocalDate) = _prefs.update { it.copy(measurementAnchor = date.toString()) }
+    fun shiftMeasurementWindow(delta: Int) {
+        val cur = _prefs.value
+        val today = LocalDate.now()
+        val anchor = cur.measurementAnchor?.let(LocalDate::parse) ?: today
+        val next = shiftWindow(MeasurementWindow(cur.measurementGranularity, anchor), delta, today)
+        _prefs.update { it.copy(measurementAnchor = next.anchor.toString()) }
+    }
     fun setTrendsTableMode(table: Boolean) = _prefs.update { it.copy(trendsTableMode = table) }
-    fun setTrendDays(days: Int) = _prefs.update { it.copy(trendDays = days) }
+    /** 记忆上次血糖场景（契约 docs/05 §8） */
+    fun setLastGlucoseCtx(ctx: String) = _prefs.update { it.copy(lastGlucoseCtx = ctx) }
 
     // ---------- 测量 ----------
     fun addMeasurement(m: Measurement) = launch { repo.addMeasurement(currentId(), m) }
@@ -171,29 +182,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } else null
         launch { repo.addNote(noteId, currentId(), text, ms, target) }
         if (ms != null) {
+            val triggerAt = if (repeatDaily) {
+                // 每天重复：若所选时刻已过，顺延到下一个未来时刻，避免立即触发
+                com.family.health.notif.ReminderScheduler.nextDailyAt(ms, System.currentTimeMillis())
+            } else ms
             container.reminderScheduler.schedule(
                 com.family.health.notif.LocalReminder(
                     id = noteId.hashCode(), title = "便签提醒",
-                    text = text.take(60), triggerAtMs = ms, repeatDaily = repeatDaily, kind = "note",
+                    text = text.take(60), triggerAtMs = triggerAt, repeatDaily = repeatDaily, kind = "note",
                 )
             )
         }
     }
 
-    // ---------- 今日用药勾选（本机视觉，按日清零） ----------
-    private val _checkTick = MutableStateFlow(0L)
-    val checkTick: StateFlow<Long> = _checkTick.asStateFlow()
-    fun dailyCheckedSet(): Set<String> = container.dailyChecks.checkedSet()
-    fun toggleDailyChecked(itemId: String) {
-        container.dailyChecks.toggle(itemId)
-        _checkTick.value = System.nanoTime()
-    }
-
     // ---------- 测量提醒（本机每天闹钟 + reminders 表） ----------
-    private val SLOT_TIMES = mapOf(
-        "morning" to "08:00", "noon" to "12:00", "evening" to "19:00", "bedtime" to "21:30",
-    )
-
     /** 概览快捷添加每日测量提醒 */
     fun addMeasureReminderTime(time: String) {
         val memberId = ui.value.currentMember.id
@@ -224,32 +226,34 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         wanted.forEach { scheduleMeasureDaily(it) }
     }
 
-    /** 余量只够最后一天时：下次服药前 1 小时本机提醒补药（每味药只排一次） */
+    /** 任一药格将在 24 小时内不足时，于该次服药前 1 小时提醒；补药、停药或改量后同步撤销/改期。 */
     fun checkLowStockReminders() {
         val now = System.currentTimeMillis()
-        val nowLabel = "%02d:%02d".format(java.time.LocalTime.now().hour, java.time.LocalTime.now().minute)
         val store = container.reminderScheduler.store()
-        ui.value.currentMember.daily.forEach { x ->
-            val stock = x.stockQty ?: return@forEach
-            val daily = x.dailyQty ?: return@forEach
-            if (daily <= 0 || stock > daily) return@forEach // 余量 > 1 天用量，无需提醒
-            val id = ("lowstock" + x.id).hashCode()
-            if (store.all().any { it.id == id }) return@forEach
-            val slotsToday = x.doseSlots.mapNotNull { SLOT_TIMES[it] }.filter { it > nowLabel }.sorted()
-            val triggerMs = if (slotsToday.isNotEmpty()) {
-                dateTimeToMs("${todayStr()} ${slotsToday.first()}") - 3600_000
-            } else {
-                val first = x.doseSlots.mapNotNull { SLOT_TIMES[it] }.minOrNull() ?: "08:00"
-                dateTimeToMs("${todayStr()} $first") + 86400_000 - 3600_000
-            }
+        val member = ui.value.currentMember
+        val meds = member.meds.filter { it.endDate == null }.associateBy { it.id }
+        val desired = mutableMapOf<Int, com.family.health.notif.LocalReminder>()
+        member.daily.forEach { stockItem ->
+            val med = meds[stockItem.medicationItemId] ?: return@forEach
+            val dose = med.doseQty ?: return@forEach
+            val remaining = projectedMedicationStock(stockItem, dose, now)
+            val firstUnavailable = med.doseSlots.mapNotNull { slot ->
+                nextUnavailableMedicationAt(slot, remaining[slot] ?: 0.0, dose, now, stockItem.tzOffsetMin)
+            }.minOrNull() ?: return@forEach
+            if (firstUnavailable - now > 86_400_000L) return@forEach
+            val id = ("lowstock" + stockItem.id).hashCode()
+            val triggerMs = firstUnavailable - 3_600_000L
             if (triggerMs <= now) return@forEach
-            container.reminderScheduler.schedule(
-                com.family.health.notif.LocalReminder(
-                    id = id, title = "补药提醒",
-                    text = "「${x.name}」只剩最后一天用量，记得补充",
-                    triggerAtMs = triggerMs, repeatDaily = false, kind = "lowstock",
-                )
+            desired[id] = com.family.health.notif.LocalReminder(
+                id = id, title = "补药提醒",
+                text = "「${med.name}」即将用完，记得补充药盒",
+                triggerAtMs = triggerMs, repeatDaily = false, kind = "lowstock",
             )
+        }
+        val existing = store.all().filter { it.kind == "lowstock" }.associateBy { it.id }
+        existing.keys.filter { it !in desired }.forEach(container.reminderScheduler::cancel)
+        desired.forEach { (id, reminder) ->
+            if (existing[id] != reminder) container.reminderScheduler.schedule(reminder)
         }
     }
 
@@ -278,7 +282,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         note: String,
         linkedEventId: String?,
         stops: Set<String>,
-        adjustments: Map<String, Pair<String, Set<String>>>,
+        adjustments: Map<String, MedicationAdjustment>,
         additions: List<MedicationItem>,
     ): Triple<Int, Int, Int> {
         launch { repo.saveMedChange(currentId(), date, note, linkedEventId, stops, adjustments, additions) }
@@ -289,11 +293,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun upsertDaily(item: DailyMedItem) = launch { repo.upsertDaily(currentId(), item) }
     fun deleteDaily(id: String) = launch { repo.deleteDaily(id) }
 
-    fun newDailyId() = UUID.randomUUID().toString()
     fun newMedId() = UUID.randomUUID().toString()
 
     // ---------- 重点清单 ----------
     fun addWatch(name: String) = launch { repo.addWatch(currentId(), name) }
+    fun removeWatch(watchId: String) = launch { repo.removeWatch(watchId) }
 
     // ---------- 我的：成员/设备/提醒 ----------
     fun saveProfile(id: String?, name: String, relation: String, gender: String, birth: String, note: String): String {
@@ -326,6 +330,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     /** 概览气泡点击设置下次复查日期 */
     fun setNextCheckup(eventId: String, date: String) = launch { repo.updateNextCheckupDate(eventId, date) }
+
+    /** 复查事件备注编辑 */
+    fun updateCheckupNote(eventId: String, note: String) = launch { repo.updateCheckupNote(eventId, note) }
 
     // ---------- 复查导入（03：dry_run 预检 → 正式导入） ----------
     fun importDryRun(text: String, onResult: (Result<ImportResult>) -> Unit) = launch {

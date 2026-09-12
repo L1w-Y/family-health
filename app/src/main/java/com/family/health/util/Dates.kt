@@ -3,6 +3,7 @@ package com.family.health.util
 
 import java.time.LocalDate
 import java.time.LocalDateTime
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 
@@ -51,8 +52,16 @@ fun deviceTzOffsetMin(): Int =
 fun msToDateTime(ms: Long): String =
     LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), java.time.ZoneId.systemDefault()).format(DT_FMT)
 
+/** 按记录写入时保存的偏移还原原始当地时间，避免换时区后日期和概览分段漂移。 */
+fun msToDateTime(ms: Long, tzOffsetMin: Int): String =
+    LocalDateTime.ofInstant(java.time.Instant.ofEpochMilli(ms), ZoneOffset.ofTotalSeconds(tzOffsetMin * 60)).format(DT_FMT)
+
 fun dateTimeToMs(text: String): Long =
     LocalDateTime.parse(text, DT_FMT).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
+/** 选定测量时刻在设备时区中的实际偏移；不能用“当前时刻”偏移替代补录日期的偏移。 */
+fun tzOffsetMinAt(text: String): Int =
+    LocalDateTime.parse(text, DT_FMT).atZone(java.time.ZoneId.systemDefault()).offset.totalSeconds / 60
 
 fun msToDate(ms: Long): String = msToDateTime(ms).substring(0, 10)
 

@@ -1,8 +1,10 @@
-// 契约：docs/05-页面结构与交互.md §8 记血压/血糖（大数字、时间默认现在、保存后自动返回）
+// 契约：docs/05-页面结构与交互.md §8 记血压/血糖
 package com.family.health.feature.entry
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -11,153 +13,221 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import com.family.health.data.AppViewModel
 import com.family.health.data.model.Labels
 import com.family.health.data.model.Measurement
-import com.family.health.ui.Routes
-import com.family.health.ui.components.FChip
 import com.family.health.ui.components.FhButton
-import com.family.health.ui.components.FhTextField
-import com.family.health.ui.components.PageSub
 import com.family.health.ui.components.PageTitle
-import com.family.health.ui.switchTab
+import com.family.health.ui.components.WheelColumn
 import com.family.health.ui.theme.FhColors
-import com.family.health.util.nowStr
+import com.family.health.ui.theme.FhType
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.YearMonth
 import java.util.UUID
 
+/**
+ * 记血压 / 记血糖。
+ * 血压和血糖均使用紧凑四列输入；概览时段由测量时间推导，血糖场景只表达测量语义。
+ */
 @Composable
 fun MeasureFormScreen(vm: AppViewModel, nav: NavHostController, type: String) {
     val ui by vm.ui.collectAsStateWithLifecycle()
-    val title = if (type == "glucose") "记血糖" else "记血压"
+    val isGlucose = type == "glucose"
+    val title = if (isGlucose) "记血糖" else "记血压"
+    val now = remember { LocalTime.now() }
 
-    var sys by remember { mutableStateOf("") }
-    var dia by remember { mutableStateOf("") }
-    var hr by remember { mutableStateOf("") }
-    var glu by remember { mutableStateOf("") }
-    var ctx by remember { mutableStateOf(ui.lastGlucoseCtx) }
-    var at by remember { mutableStateOf(nowStr()) }
+    var systolic by remember { mutableStateOf("") }
+    var diastolic by remember { mutableStateOf("") }
+    var heartRate by remember { mutableStateOf("") }
+    var glucose by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
-    var showPicker by remember { mutableStateOf(false) }
+    var entered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { entered = true }
 
-    fun save(again: Boolean) {
-        val me = ui.devices.firstOrNull { it.self }?.displayName ?: "爸爸"
-        val rec = when (type) {
-            "bp" -> {
-                val s = sys.toIntOrNull(); val d = dia.toIntOrNull()
-                if (s == null || d == null) {
-                    vm.toast("请填写高压和低压")
-                    return
-                }
-                Measurement(
-                    id = "ms" + UUID.randomUUID().toString().substring(0, 8),
-                    type = "bp", measuredAt = at,
-                    systolic = s, diastolic = d, heartRateBpm = hr.toIntOrNull(),
-                    note = note, createdBy = me,
-                )
-            }
-            else -> {
-                val g = glu.toDoubleOrNull()
-                if (g == null) {
-                    vm.toast("请填写血糖")
-                    return
-                }
-                Measurement(
-                    id = "ms" + UUID.randomUUID().toString().substring(0, 8),
-                    type = "glucose", measuredAt = at,
-                    glucoseMmol = g, glucoseContext = ctx,
-                    note = note, createdBy = me,
-                )
-            }
+    val sceneKeys = remember { Labels.GLUCOSE_SCENES.map { it.first } }
+    var sceneIndex by remember {
+        mutableIntStateOf(sceneKeys.indexOf(ui.lastGlucoseCtx).coerceAtLeast(0))
+    }
+
+    // 测量时间默认真实当前时刻；保留原有年、月、日、时、分选择与日期裁剪逻辑。
+    val today = remember { LocalDate.now() }
+    val yearRange = 2024..2030
+    var year by remember { mutableIntStateOf(today.year) }
+    var month by remember { mutableIntStateOf(today.monthValue) }
+    var day by remember { mutableIntStateOf(today.dayOfMonth) }
+    var hour by remember { mutableIntStateOf(now.hour) }
+    var minute by remember { mutableIntStateOf(now.minute) }
+    val daysInMonth = runCatching { YearMonth.of(year, month).lengthOfMonth() }.getOrDefault(31)
+    val safeDay = day.coerceIn(1, daysInMonth)
+    LaunchedEffect(safeDay) { if (day != safeDay) day = safeDay }
+
+    fun save() {
+        val createdBy = ui.devices.firstOrNull { it.self }?.displayName ?: "爸爸"
+        val measuredAt = "%04d-%02d-%02d %02d:%02d".format(year, month, safeDay, hour, minute)
+        val selectedAt = LocalDateTime.of(year, month, safeDay, hour, minute)
+        if (selectedAt.isAfter(LocalDateTime.now())) {
+            vm.toast("测量时间不能晚于现在")
+            return
         }
-        vm.addMeasurement(rec)
+
+        val measurement = if (isGlucose) {
+            val value = glucose.toDoubleOrNull()
+            if (value == null) {
+                vm.toast("请填写血糖")
+                return
+            }
+            if (!validGlucose(value)) {
+                vm.toast("血糖请输入 0.5–40 mmol/L")
+                return
+            }
+            vm.setLastGlucoseCtx(sceneKeys[sceneIndex])
+            Measurement(
+                id = UUID.randomUUID().toString(),
+                type = "glucose",
+                measuredAt = measuredAt,
+                glucoseMmol = value,
+                glucoseContext = sceneKeys[sceneIndex],
+                note = note,
+                createdBy = createdBy,
+            )
+        } else {
+            val high = systolic.toIntOrNull()
+            val low = diastolic.toIntOrNull()
+            if (high == null || low == null) {
+                vm.toast("请填写高压和低压")
+                return
+            }
+            if (!validBloodPressure(high) || !validBloodPressure(low)) {
+                vm.toast("高压和低压请输入 40–300 mmHg")
+                return
+            }
+            val bpm = heartRate.toIntOrNull()
+            if (bpm != null && !validHeartRate(bpm)) {
+                vm.toast("心率请输入 20–250 次/分")
+                return
+            }
+            Measurement(
+                id = UUID.randomUUID().toString(),
+                type = "bp",
+                measuredAt = measuredAt,
+                systolic = high,
+                diastolic = low,
+                heartRateBpm = bpm,
+                note = note,
+                createdBy = createdBy,
+            )
+        }
+
+        vm.addMeasurement(measurement)
         vm.toast("已保存")
-        if (again) {
-            sys = ""; dia = ""; hr = ""; glu = ""; note = ""
-            at = nowStr()
-        } else {
-            vm.setRecordsSeg("measure")
-            nav.switchTab(Routes.RECORDS)
-        }
+        nav.popBackStack()
     }
 
-    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        PageTitle(title, onBack = { nav.popBackStack() })
-        PageSub(ui.currentMember.name)
+    AnimatedVisibility(
+        visible = entered,
+        enter = fadeIn(tween(200)) + slideInVertically(tween(220)) { it / 16 },
+    ) {
+        Column(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            PageTitle(title = title, onBack = { nav.popBackStack() }, form = true, compact = true)
 
-        if (type == "bp") {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                FhTextField(sys, { sys = it }, "高压 (mmHg)", Modifier.weight(1f), number = true, placeholder = "138")
-                FhTextField(dia, { dia = it }, "低压 (mmHg)", Modifier.weight(1f), number = true, placeholder = "86")
+            if (isGlucose) {
+                GlucoseInputRow(
+                    glucose = glucose,
+                    onGlucoseChange = { glucose = it },
+                    scenes = sceneKeys.map(Labels::sceneName),
+                    sceneIndex = sceneIndex,
+                    onSceneChange = { sceneIndex = it },
+                )
+            } else {
+                BloodPressureInputRow(
+                    systolic = systolic,
+                    onSystolicChange = { systolic = it },
+                    diastolic = diastolic,
+                    onDiastolicChange = { diastolic = it },
+                    heartRate = heartRate,
+                    onHeartRateChange = { heartRate = it },
+                )
             }
-            FhTextField(hr, { hr = it }, "心率", number = true, placeholder = "72")
-        } else {
-            FhTextField(glu, { glu = it }, "血糖 (mmol/L)", number = true, placeholder = "6.1")
-            Text("测量场景", fontSize = 13.sp, color = FhColors.Text2,
-                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                modifier = Modifier.padding(bottom = 6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Labels.GLUCOSE_CTX_FULL.entries.take(3).forEach { (key, label) ->
-                    FChip(label, on = ctx == key) { ctx = key }
-                }
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                Labels.GLUCOSE_CTX_FULL.entries.drop(3).forEach { (key, label) ->
-                    FChip(label, on = ctx == key) { ctx = key }
-                }
-            }
-            Spacer(Modifier.height(14.dp))
-        }
-        Column {
-            Text("测量时间", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
-                modifier = Modifier.padding(bottom = 6.dp))
+
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "测量时间",
+                fontSize = FhType.Label,
+                fontWeight = FontWeight.SemiBold,
+                color = FhColors.Text2,
+            )
+            Spacer(Modifier.height(4.dp))
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
-                    .background(androidx.compose.ui.graphics.Color.White)
-                    .clickable { showPicker = true }
-                    .padding(horizontal = 12.dp, vertical = 13.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(1.dp),
             ) {
-                Text(at, fontSize = 14.sp, color = FhColors.Text)
+                WheelColumn(
+                    yearRange.map { "${it}年" },
+                    year - yearRange.first,
+                    { year = yearRange.first + it },
+                    Modifier.weight(1.25f),
+                    itemHeight = 30.dp,
+                )
+                WheelColumn(
+                    (1..12).map { "%02d月".format(it) },
+                    month - 1,
+                    { month = it + 1 },
+                    Modifier.weight(1f),
+                    itemHeight = 30.dp,
+                )
+                WheelColumn(
+                    (1..daysInMonth).map { "%02d日".format(it) },
+                    safeDay - 1,
+                    { day = it + 1 },
+                    Modifier.weight(1f),
+                    itemHeight = 30.dp,
+                )
+                WheelColumn(
+                    (0..23).map { "%02d时".format(it) },
+                    hour,
+                    { hour = it },
+                    Modifier.weight(1f),
+                    itemHeight = 30.dp,
+                )
+                WheelColumn(
+                    (0..59).map { "%02d分".format(it) },
+                    minute,
+                    { minute = it },
+                    Modifier.weight(1f),
+                    itemHeight = 30.dp,
+                )
             }
-            Spacer(Modifier.height(14.dp))
-        }
-        FhTextField(note, { note = it }, "备注")
-        FhButton("保 存", onClick = { save(false) })
-        FhButton("保存并再记一条", onClick = { save(true) }, ghost = true)
-        Spacer(Modifier.height(20.dp))
-    }
 
-    if (showPicker) {
-        com.family.health.ui.components.FhDateTimePickerDialog(
-            initialDate = at.substring(0, 10),
-            initialTime = at.substring(11),
-            needDate = true,
-            needTime = true,
-            title = "测量时间",
-            onConfirm = { d, t ->
-                if (d != null && t != null) at = "$d $t"
-                showPicker = false
-            },
-            onDismiss = { showPicker = false },
-        )
+            Spacer(Modifier.height(12.dp))
+            CompactNoteField(note, onChange = { note = it })
+            Spacer(Modifier.height(12.dp))
+            FhButton(
+                text = "保 存",
+                onClick = ::save,
+                topPadding = 0.dp,
+                pressFeedback = true,
+            )
+            Spacer(Modifier.height(16.dp))
+        }
     }
 }

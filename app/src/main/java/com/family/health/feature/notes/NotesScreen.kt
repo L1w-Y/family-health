@@ -1,6 +1,8 @@
 // 契约：docs/05-页面结构与交互.md §3 便签卡（列表/新建/编辑/完成）
 package com.family.health.feature.notes
 
+import com.family.health.ui.theme.FhType
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -45,7 +47,7 @@ fun NotesScreen(vm: AppViewModel, nav: NavHostController) {
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
         PageTitle("便签", onBack = { nav.popBackStack() }) {
             Text(
-                "＋ 新建", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
+                "＋ 新建", fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Primary,
                 modifier = Modifier
                     .clickable { nav.navigate(Routes.NOTE_FORM) }
                     .padding(4.dp),
@@ -65,7 +67,7 @@ fun NotesScreen(vm: AppViewModel, nav: NavHostController) {
                     )
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            n.text, fontSize = 14.5.sp, lineHeight = 22.sp,
+                            n.text, fontSize = FhType.Body, lineHeight = 22.sp,
                             color = if (n.done) FhColors.Text2 else FhColors.Text,
                             textDecoration = if (n.done) TextDecoration.LineThrough else null,
                         )
@@ -78,11 +80,11 @@ fun NotesScreen(vm: AppViewModel, nav: NavHostController) {
                         ) {
                             Text(
                                 "${n.createdBy} · ${n.createdAtLabel}",
-                                fontSize = 12.sp, color = FhColors.Text2,
+                                fontSize = FhType.Caption, color = FhColors.Text2,
                             )
                             Spacer(Modifier.weight(1f))
                             Text(
-                                "删除", fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Amber,
+                                "删除", fontSize = FhType.Caption, fontWeight = FontWeight.SemiBold, color = FhColors.Amber,
                                 modifier = Modifier
                                     .clickable {
                                         vm.deleteNote(n.id)
@@ -110,10 +112,10 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
     var showPicker by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
-        PageTitle("新建便签", onBack = { nav.popBackStack() })
-        FhTextField(text, { text = it }, "内容", multiline = true, placeholder = "如：下周三上午去取药")
+        PageTitle("新建便签", form = true, onBack = { nav.popBackStack() })
+        FhTextField(text, { text = it }, "内容", multiline = true)
 
-        Text("提醒时刻", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+        Text("提醒时刻", fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
             modifier = Modifier.padding(bottom = 6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             FChip(
@@ -133,7 +135,7 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
         }
         Spacer(Modifier.height(14.dp))
 
-        Text("提醒对象", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
+        Text("提醒对象", fontSize = FhType.Label, fontWeight = FontWeight.SemiBold, color = FhColors.Text2,
             modifier = Modifier.padding(bottom = 6.dp))
         Row {
             FChip("全家", on = target == null) { target = null }
@@ -152,6 +154,13 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
                 vm.toast("日期和时间要一起选")
                 return@FhButton
             }
+            if (date != null && time != null && !repeatDaily) {
+                val t = runCatching { com.family.health.util.dateTimeToMs("$date $time") }.getOrNull()
+                if (t != null && t <= System.currentTimeMillis()) {
+                    vm.toast("提醒时间已过，请重新选择")
+                    return@FhButton
+                }
+            }
             vm.addNote(text.trim(), date, time, repeatDaily, target)
             vm.toast("已保存")
             nav.popBackStack()
@@ -162,7 +171,7 @@ fun NoteFormScreen(vm: AppViewModel, nav: NavHostController) {
     if (showPicker) {
         com.family.health.ui.components.FhDateTimePickerDialog(
             initialDate = date ?: java.time.LocalDate.now().toString(),
-            initialTime = time,
+            initialTime = time ?: java.time.LocalTime.now().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm")),
             needDate = true,
             needTime = true,
             title = "提醒时刻",
