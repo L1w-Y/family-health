@@ -71,7 +71,7 @@ data class MedChange(
     val linkedEventId: String? = null,
 )
 
-/** 今日用药条目（执行层，关联方案并只保存分时段盘点事实）。契约 §3.15 */
+/** 今日用药条目（执行层；id 为独立 UUID，≠ medicationItemId）。契约 §3.15 */
 data class DailyMedItem(
     val id: String,
     val medicationItemId: String,

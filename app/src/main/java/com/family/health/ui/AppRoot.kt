@@ -13,13 +13,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -308,7 +312,7 @@ private fun SheetAction(text: String, modifier: Modifier, enabled: Boolean = tru
     }
 }
 
-/** 成员切换条（常驻顶部：居中气泡名，点击切换成员） */
+/** 成员切换条（常驻顶部：居中气泡名，点击切换成员；避让状态栏） */
 @Composable
 private fun MemberBar(
     name: String,
@@ -320,6 +324,7 @@ private fun MemberBar(
         modifier = Modifier
             .fillMaxWidth()
             .background(FhColors.Bg)
+            .statusBarsPadding()
             .padding(top = 8.dp, bottom = 10.dp),
     ) {
         Text(
@@ -342,15 +347,20 @@ private val TABS = listOf(
     TabSpec(Routes.MINE, "我的", Icons.Outlined.Person),
 )
 
-/** 底部 4 Tab + 中央「＋」（契约 §1） */
+/** 底部 4 Tab + 中央「＋」（契约 §1；白底延伸进系统导航区，内容避让 inset） */
 @Composable
 private fun TabBar(currentRoute: String?, onTab: (String) -> Unit, onPlus: () -> Unit) {
-    Box(modifier = Modifier.fillMaxWidth()) {
+    // background 在 navigationBarsPadding 外侧：系统手势/三键栏区域仍铺白底，Tab 文字不被截断
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.White)
+            .windowInsetsPadding(WindowInsets.navigationBars)
+            .drawBehind { drawLine(FhColors.Line, Offset.Zero, Offset(size.width, 0f), 1.dp.toPx()) },
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color.White)
-                .drawBehind { drawLine(FhColors.Line, Offset.Zero, Offset(size.width, 0f), 1.dp.toPx()) }
                 .padding(top = 1.dp)
                 .height(62.dp),
         ) {

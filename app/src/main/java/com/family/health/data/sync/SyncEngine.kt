@@ -1,5 +1,5 @@
 // 同步引擎：下行增量应用（事务）、上行 outbox 重放（同 idemKey 整批）、错误外露
-// 契约：docs/02 §4.1（since/next 增量）、§4.2（幂等重放）
+// 契约：docs/02 §4.1（since/next 增量）、§4.2（幂等重放；上行失败不阻断下行；分批续推）
 package com.family.health.data.sync
 
 import androidx.room.withTransaction
@@ -12,6 +12,7 @@ import com.family.health.data.db.IndicatorItemEntity
 import com.family.health.data.db.MedChangeEntity
 import com.family.health.data.db.MeasurementEntity
 import com.family.health.data.db.MedicationItemEntity
+import com.family.health.data.db.MetaEntity
 import com.family.health.data.db.NoteEntity
 import com.family.health.data.db.ProfileEntity
 import com.family.health.data.db.ReminderEntity
@@ -53,23 +54,60 @@ class SyncEngine(
     /** 非阻塞触发：推 outbox → 拉增量（写操作后调用） */
     fun kickPush() = scope.launch { cycle() }
 
-    /** 非阻塞触发：仅下拉（启动/手动刷新） */
+    /** 非阻塞触发：推拉一轮（启动/手动刷新）；上行失败仍继续下行 */
     fun kickPull() = scope.launch { cycle() }
 
     /** 挂起式全量同步（首配/导入后调用）；异常上抛 */
-    suspend fun pullAll() = lock.withLock { pullAllInternal() }
+    suspend fun pullAll() = lock.withLock {
+        repairCorruptDailyMedOnce()
+        pullAllInternal()
+    }
 
     private suspend fun cycle() = lock.withLock {
         if (!session.isConfigured) return@withLock
         _syncing.value = true
         try {
-            pushPendingInternal()
-            pullAllInternal()
-            _lastError.value = null
-        } catch (e: Exception) {
-            _lastError.value = e.message ?: "同步失败"
+            repairCorruptDailyMedOnce()
+            var pushError: String? = null
+            var pullError: String? = null
+            try {
+                pushPendingInternal()
+            } catch (e: Exception) {
+                pushError = e.message ?: "同步失败"
+            }
+            try {
+                pullAllInternal()
+            } catch (e: Exception) {
+                pullError = e.message ?: "同步失败"
+            }
+            _lastError.value = combineSyncPhaseErrors(pushError, pullError)
         } finally {
             _syncing.value = false
+        }
+    }
+
+    /**
+     * 一次性丢弃历史坏今日用药队列：执行行 id 误用药品 id 的 outbox 与本地 seq=0 乐观行。
+     * 今日用药是执行层，丢弃未同步库存后由用户重新添加即可。
+     */
+    private suspend fun repairCorruptDailyMedOnce() {
+        if (db.metaDao().get(DAILY_MED_ID_REPAIR_META_KEY) == "1") return
+        val plan = planCorruptDailyMedRepair(
+            localRows = db.dailyMedItemDao().all().map {
+                DailyMedLocalRow(it.id, it.medicationItemId, it.seq)
+            },
+            outbox = db.outboxDao().pending().map {
+                OutboxScanRow(it.id, it.tableName, it.op, it.rowJson)
+            },
+        )
+        db.withTransaction {
+            if (plan.localIdsToDelete.isNotEmpty()) {
+                db.dailyMedItemDao().deleteByIds(plan.localIdsToDelete)
+            }
+            if (plan.outboxIdsToDelete.isNotEmpty()) {
+                db.outboxDao().deleteByIds(plan.outboxIdsToDelete)
+            }
+            db.metaDao().put(MetaEntity(DAILY_MED_ID_REPAIR_META_KEY, "1"))
         }
     }
 
@@ -108,14 +146,22 @@ class SyncEngine(
         }
     }
 
-    /** 按 idemKey 分组整批推送（02 §4.2：同批共键，服务端整批幂等）；失败保留待下次 */
+    /**
+     * 按 idemKey 顺序逐批推送（02 §4.2：同批共键，服务端整批幂等）。
+     * 成功批次立即删 outbox；失败批次保留并继续后续批次；若有失败则抛错供 cycle 记录，但不阻断下行。
+     */
     private suspend fun pushPendingInternal() {
         val items = db.outboxDao().pending()
         if (items.isEmpty()) return
-        items.groupBy { it.idemKey }.forEach { (key, group) ->
+        val byKey = items.groupBy { it.idemKey }
+        val batches = orderedOutboxBatches(items.map { it.idemKey }).map { key -> key to byKey.getValue(key) }
+        val result = runContinuingBatches(batches) { (key, group) ->
             val ops = group.map { WriteOp(it.tableName, it.op, json.parseToJsonElement(it.rowJson).jsonObject) }
             client.push(session.server, session.token, key, ops)
             db.outboxDao().deleteByIds(group.map { it.id })
+        }
+        if (!result.allSucceeded) {
+            throw Exception(result.errors.joinToString("；"))
         }
     }
 }

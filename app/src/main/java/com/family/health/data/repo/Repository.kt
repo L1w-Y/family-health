@@ -29,12 +29,12 @@ import com.family.health.data.model.Profile
 import com.family.health.data.model.ReminderSetting
 import com.family.health.data.model.Report
 import com.family.health.data.model.WatchItem
+import com.family.health.data.resolveDailyMedRowId
 import com.family.health.data.session.SessionStore
 import com.family.health.data.sync.SyncEngine
 import com.family.health.syncclient.HttpSyncClient
 import com.family.health.syncclient.ImportResult
 import com.family.health.util.dateTimeToMs
-import com.family.health.util.deviceTzOffsetMin
 import com.family.health.util.deviceTzOffsetMin
 import com.family.health.util.mmDdHmToMs
 import com.family.health.util.msToDate
@@ -397,18 +397,20 @@ class Repository(
     }
 
     suspend fun upsertDaily(profileId: String, item: DailyMedItem) {
-        val exists = db.dailyMedItemDao().byId(item.id) != null
+        // 按业务唯一键（活跃 medication_item_id）定位；不复用墓碑 id
+        val existing = db.dailyMedItemDao().byMedicationId(item.medicationItemId)
+        val rowId = resolveDailyMedRowId(existing?.id, item.id, item.medicationItemId)
         val e = DailyMedItemEntity(
-            id = item.id, profileId = profileId, medicationItemId = item.medicationItemId,
+            id = rowId, profileId = profileId, medicationItemId = item.medicationItemId,
             stockBySlotJson = doublesToJsonObject(item.stockBySlot),
             stockCountedAtMs = item.stockCountedAtMs, tzOffsetMin = item.tzOffsetMin,
-            deleted = false, seq = 0,
+            deleted = false, seq = existing?.seq ?: 0,
         )
         val key = uuid()
         db.withTransaction {
             db.dailyMedItemDao().upsertAll(listOf(e))
             db.outboxDao().insertAll(outboxOps(key, listOf(
-                Triple("daily_med_items", if (exists) "update" else "insert", dailyMedItemToRow(e))
+                Triple("daily_med_items", if (existing != null) "update" else "insert", dailyMedItemToRow(e))
             )))
         }
         engine.kickPush()

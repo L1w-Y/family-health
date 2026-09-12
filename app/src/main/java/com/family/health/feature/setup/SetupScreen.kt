@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
@@ -35,7 +36,12 @@ fun SetupScreen(vm: AppViewModel) {
     var secret by remember { mutableStateOf("") }
     var name by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.padding(horizontal = 10.dp).verticalScroll(rememberScrollState())) {
+    Column(
+        modifier = Modifier
+            .systemBarsPadding()
+            .padding(horizontal = 10.dp)
+            .verticalScroll(rememberScrollState()),
+    ) {
         PageTitle(form = true, title = "连接家庭服务器")
         Text(
             "同一家庭的所有设备使用同一个家庭口令。",

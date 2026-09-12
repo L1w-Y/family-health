@@ -29,6 +29,7 @@ import androidx.compose.ui.window.DialogProperties
 import com.family.health.data.model.DailyMedItem
 import com.family.health.data.model.MedicationItem
 import com.family.health.data.model.dosageLabel
+import com.family.health.data.newDailyMedExecutionId
 import com.family.health.ui.components.FhButton
 import com.family.health.ui.components.FhSmallButton
 import com.family.health.ui.components.RowCard
@@ -112,7 +113,7 @@ internal fun DailyAddDialog(
                         }
                         onSave(
                             DailyMedItem(
-                                id = med.id,
+                                id = newDailyMedExecutionId(),
                                 medicationItemId = med.id,
                                 stockBySlot = parsed.mapValues { it.value!! },
                                 stockCountedAtMs = System.currentTimeMillis(),

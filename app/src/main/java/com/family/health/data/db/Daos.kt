@@ -93,9 +93,12 @@ interface NoteDao {
 interface DailyMedItemDao {
     @Upsert suspend fun upsertAll(items: List<DailyMedItemEntity>)
     @Query("SELECT * FROM daily_med_items WHERE deleted = 0") fun observeAll(): Flow<List<DailyMedItemEntity>>
+    @Query("SELECT * FROM daily_med_items") suspend fun all(): List<DailyMedItemEntity>
     @Query("SELECT * FROM daily_med_items WHERE id = :id") suspend fun byId(id: String): DailyMedItemEntity?
     @Query("SELECT * FROM daily_med_items WHERE medicationItemId = :medicationItemId AND deleted = 0 LIMIT 1")
     suspend fun byMedicationId(medicationItemId: String): DailyMedItemEntity?
+    @Query("DELETE FROM daily_med_items WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
 }
 
 @Dao

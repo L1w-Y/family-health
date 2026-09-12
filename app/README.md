@@ -32,6 +32,8 @@ notif/：本机提醒（AlarmManager + 通知渠道 + 开机重排；便签时�
 
 写入规则（与服务端一致）：追加型表（测量等）"编辑"= 软删旧行 + 新 id 插入；可改表整行 LWW；
 改量链先写 med_changes 再写 medication_items；NOT NULL 列必须给值。
+同步：上行按 idemKey 逐批，失败批次保留并继续后续；上行失败不阻断下行。今日用药
+`daily_med_items.id` 为独立 UUID（≠ medication_item_id）；启动一次性清理历史坏 outbox。
 
 ## 模块地图（package）
 
@@ -48,6 +50,7 @@ com.family.health
 │   ├── AppViewModel.kt           状态装配 + 动作分发（页面不直接触库）
 │   ├── MeasurementTimeBucket.kt  概览测量时间段（早晨/上午/下午/晚上；仅由 measured_at 推导）
 │   ├── MedicationStock.kt        今日用药按药格和截止时间推算理论余量/补药时点
+│   ├── DailyMedIdentity.kt       今日用药执行行独立 UUID（禁止复用药品 id）
 │   ├── Logic.kt / ImportParser.kt 指标匹配等纯逻辑 / 导入预览解析
 ├── syncclient/HttpSyncClient.kt  服务端 HTTP 客户端（docs/02 §3.2/§4、docs/03）
 ├── notif/                        LocalReminder / ReminderScheduler / ReminderReceiver（本机闹钟与通知）
